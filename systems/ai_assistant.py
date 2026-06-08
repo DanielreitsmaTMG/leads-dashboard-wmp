@@ -65,13 +65,24 @@ die via een Meta Ads leadformulier heeft gereageerd op een vacature.
 Naam: {full_name or "onbekend"}
 Klant (opdrachtgever waarbij gesolliciteerd is): {client_name or "onbekend"}
 Vacature: {vacancy_name or "onbekend"}
-Formulierantwoorden:
+Formulierantwoorden (vraag: antwoord):
 {antwoorden}
 
-Schrijf een korte samenvatting (max 3 zinnen, in het Nederlands) voor de recruiter:
+Schrijf een korte, CONCRETE samenvatting (max 4-5 zinnen, in het Nederlands) voor de recruiter.
+Belangrijkste eis: noem de daadwerkelijk ingevulde antwoorden letterlijk/concreet, niet vaag
+samengevat. Dus bijvoorbeeld:
+- "Heeft 3 jaar ervaring als schilder" in plaats van "heeft relevante ervaring"
+- "Heeft rijbewijs B" of "Heeft geen rijbewijs" — benoem dit altijd expliciet als het gevraagd is
+- "Woont in Sliedrecht" in plaats van "woont in de buurt"
+- "Beschikbaar vanaf 1 juli, 32 uur per week" in plaats van "is beschikbaar"
+
+Loop dus de formulierantwoorden langs en verwerk de concrete waarden (aantal jaren ervaring,
+rijbewijs ja/nee, woonplaats, beschikbaarheid, opleiding, etc.) letterlijk in de samenvatting.
+Vat NIET vaag samen — wees specifiek en feitelijk, alsof je de antwoorden navertelt.
+
+Sluit af met:
 - Vermeld bij welke klant/opdrachtgever deze persoon heeft gesolliciteerd.
-- Wie is deze persoon en wat is relevant uit de antwoorden?
-- Geef een korte inschatting van de match met de vacature (bijv. "lijkt goede match",
+- Een korte inschatting van de match met de vacature (bijv. "lijkt goede match",
   "twijfelachtig vanwege...", "onvoldoende informatie om te beoordelen").
 
 Geef alleen de samenvatting terug, zonder inleidende tekst."""
