@@ -130,14 +130,40 @@ if st.session_state.page == "settings":
     if token:
         if st.button("🔍 Haal al mijn pagina's op uit Meta", type="primary"):
             import requests
+            pages = []
             try:
+                # Stap 1: directe pagina's via gebruiker
                 r = requests.get(
                     "https://graph.facebook.com/v21.0/me/accounts",
                     params={"access_token": token, "limit": 100},
                     timeout=15,
                 )
                 r.raise_for_status()
-                pages = r.json().get("data", [])
+                pages += r.json().get("data", [])
+
+                # Stap 2: pagina's via Business Manager
+                biz_r = requests.get(
+                    "https://graph.facebook.com/v21.0/me/businesses",
+                    params={"access_token": token, "limit": 100},
+                    timeout=15,
+                )
+                biz_r.raise_for_status()
+                businesses = biz_r.json().get("data", [])
+
+                seen_ids = {p["id"] for p in pages}
+                for biz in businesses:
+                    for endpoint in ["owned_pages", "client_pages"]:
+                        pr = requests.get(
+                            f"https://graph.facebook.com/v21.0/{biz['id']}/{endpoint}",
+                            params={"access_token": token, "fields": "id,name", "limit": 100},
+                            timeout=15,
+                        )
+                        if pr.ok:
+                            for page in pr.json().get("data", []):
+                                if page["id"] not in seen_ids:
+                                    pages.append(page)
+                                    seen_ids.add(page["id"])
+
                 st.session_state["discovered_pages"] = pages
             except Exception as e:
                 st.error(f"Fout bij ophalen pagina's: {e}")
