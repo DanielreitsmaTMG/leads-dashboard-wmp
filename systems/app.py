@@ -375,33 +375,44 @@ st.caption(f"{len(leads)} leads gevonden")
 if not leads:
     st.info("Geen leads gevonden.")
 else:
-    header = st.columns([1.5, 2, 2.5, 1.8, 3, 2.5, 0.6])
-    headers = ["Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+    if not client_id:
+        col_sizes = [1.5, 1.5, 2, 2.5, 1.8, 3, 2.5, 0.6]
+        headers   = ["Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+    else:
+        col_sizes = [1.5, 2, 2.5, 1.8, 3, 2.5, 0.6]
+        headers   = ["Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+
+    header = st.columns(col_sizes)
     for h_col, h_txt in zip(header, headers):
         h_col.markdown(f"**{h_txt}**")
 
     st.divider()
     for lead in leads:
-        row = st.columns([1.5, 2, 2.5, 1.8, 3, 2.5, 0.6])
+        row = st.columns(col_sizes)
         row[0].caption(fmt_dt(lead["created_time"]))
-        row[1].markdown(lead["full_name"] or "—")
-        if lead["email"]:
-            row[2].markdown(f"[{lead['email']}](mailto:{lead['email']})")
+        if not client_id:
+            row[1].caption(lead["client_name"] or "—")
+            offset = 2
         else:
-            row[2].markdown("—")
-        row[3].markdown(lead["phone"] or "—")
+            offset = 1
+        row[offset].markdown(lead["full_name"] or "—")
+        if lead["email"]:
+            row[offset + 1].markdown(f"[{lead['email']}](mailto:{lead['email']})")
+        else:
+            row[offset + 1].markdown("—")
+        row[offset + 2].markdown(lead["phone"] or "—")
 
         # Formulier antwoorden
         form_data = json.loads(lead["form_data"] or "{}")
         if form_data:
             antwoorden = "  \n".join(f"**{k}:** {v}" for k, v in form_data.items())
-            row[4].markdown(antwoorden)
+            row[offset + 3].markdown(antwoorden)
         else:
-            row[4].caption("—")
+            row[offset + 3].caption("—")
 
         # Status dropdown
         current_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
-        new_status = row[5].selectbox(
+        new_status = row[offset + 4].selectbox(
             "",
             options=STATUSES,
             index=current_idx,
@@ -412,7 +423,7 @@ else:
             update_status(lead["id"], new_status)
             st.rerun()
 
-        if row[6].button("→", key=f"open_{lead['id']}"):
+        if row[offset + 5].button("→", key=f"open_{lead['id']}"):
             st.session_state.selected_lead_id = lead["id"]
             st.session_state.page = "detail"
             st.rerun()
