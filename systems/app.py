@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -77,6 +77,14 @@ if "active_vacancy" not in st.session_state:
     st.session_state.active_vacancy = None
 if "selected_lead_id" not in st.session_state:
     st.session_state.selected_lead_id = None
+if "leads_page" not in st.session_state:
+    st.session_state.leads_page = 0
+if "selected_leads" not in st.session_state:
+    st.session_state.selected_leads = set()
+if "status_filter_override" not in st.session_state:
+    st.session_state.status_filter_override = None
+
+PAGE_SIZE = 25
 
 # ── Kleurmapping → Streamlit badge-kleuren ────────────────────────────────────
 BADGE_EMOJI = {
@@ -97,6 +105,36 @@ def fmt_dt(value):
         return dt.strftime("%d-%m-%Y %H:%M")
     except Exception:
         return value
+
+
+def rel_time(value):
+    if not value:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        diff = datetime.now(timezone.utc) - dt
+        s = diff.total_seconds()
+        if s < 60:       return "Zojuist"
+        if s < 3600:     return f"{int(s/60)}m geleden"
+        if s < 86400:    return f"{int(s/3600)}u geleden"
+        if s < 172800:   return "Gisteren"
+        if s < 604800:   return f"{int(s/86400)} dagen geleden"
+        return dt.strftime("%d-%m-%Y")
+    except Exception:
+        return str(value)
+
+
+def is_new(value):
+    """True als lead minder dan 24 uur oud is."""
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() < 86400
+    except Exception:
+        return False
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -390,99 +428,197 @@ elif client_id:
 else:
     st.title("🌐 Alle clients")
 
-# Statuskaarten
+# ── Statuskaarten (klikbaar als filter) ──────────────────────────────────────
 counts = cached_counts(client_id)
 total  = sum(counts.values())
 cols   = st.columns(len(STATUSES) + 1)
-cols[0].metric("Totaal", total)
+
+if cols[0].button(f"**Totaal**\n\n### {total}", use_container_width=True, key="f_all"):
+    st.session_state.status_filter_override = None
+    st.session_state.leads_page = 0
+    st.rerun()
+
 for i, s in enumerate(STATUSES):
-    cols[i + 1].metric(s, counts[s])
+    emoji = BADGE_EMOJI.get(s, "")
+    if cols[i+1].button(f"{emoji} **{s}**\n\n### {counts[s]}", use_container_width=True, key=f"f_{s}"):
+        st.session_state.status_filter_override = s
+        st.session_state.leads_page = 0
+        st.rerun()
 
 st.divider()
 
-# Filters
+# ── Filters ───────────────────────────────────────────────────────────────────
 PERIODE_OPTIES = {
-    "Afgelopen 24 uur":  1,
-    "Afgelopen 48 uur":  2,
-    "Afgelopen 7 dagen": 7,
-    "Afgelopen 14 dagen": 14,
-    "Afgelopen 31 dagen": 31,
-    "Afgelopen 60 dagen": 60,
-    "Afgelopen 90 dagen": 90,
-    "Alle tijd": None,
+    "Afgelopen 24 uur": 1, "Afgelopen 48 uur": 2, "Afgelopen 7 dagen": 7,
+    "Afgelopen 14 dagen": 14, "Afgelopen 31 dagen": 31,
+    "Afgelopen 60 dagen": 60, "Afgelopen 90 dagen": 90, "Alle tijd": None,
+}
+SORTEER_OPTIES = {
+    "Datum (nieuw→oud)": ("created_time", True),
+    "Datum (oud→nieuw)": ("created_time", False),
+    "Naam (A→Z)":        ("full_name", False),
+    "Status":            ("status", False),
 }
 
-col_f1, col_f2, col_f3 = st.columns([2, 2, 3])
+col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 3])
 periode       = col_f1.selectbox("Periode", list(PERIODE_OPTIES.keys()), index=2)
-status_filter = col_f2.selectbox("Status", ["Alle"] + STATUSES, index=0)
-search        = col_f3.text_input("Zoeken", placeholder="Naam, e-mail of telefoon...")
+default_status_idx = (["Alle"] + STATUSES).index(st.session_state.status_filter_override) \
+    if st.session_state.status_filter_override in STATUSES else 0
+status_filter = col_f2.selectbox("Status", ["Alle"] + STATUSES, index=default_status_idx, key="status_filter_select")
+sorteer       = col_f3.selectbox("Sorteren", list(SORTEER_OPTIES.keys()), index=0)
+search        = col_f4.text_input("Zoeken", placeholder="Naam, e-mail of telefoon...")
+
+# Sync override met selectbox
+if status_filter != (st.session_state.status_filter_override or "Alle"):
+    st.session_state.status_filter_override = status_filter if status_filter != "Alle" else None
 
 days = PERIODE_OPTIES[periode]
+sort_key, sort_rev = SORTEER_OPTIES[sorteer]
 
-leads = cached_leads(
+all_leads = cached_leads(
     client_id=client_id,
-    status_filter=status_filter if status_filter != "Alle" else None,
+    status_filter=st.session_state.status_filter_override,
     search=search or None,
     days=days,
     vacancy_name=active_vacancy,
 )
 
-st.caption(f"{len(leads)} leads gevonden")
+# Sorteren
+def sort_val(lead):
+    v = lead.get(sort_key) or ""
+    return str(v).lower()
 
-# Tabel
-if not leads:
+all_leads = sorted(all_leads, key=sort_val, reverse=sort_rev)
+
+# ── Bulk actie ────────────────────────────────────────────────────────────────
+if st.session_state.selected_leads:
+    n_sel = len(st.session_state.selected_leads)
+    bc1, bc2, bc3 = st.columns([3, 2, 1])
+    bc1.info(f"**{n_sel} lead{'s' if n_sel > 1 else ''}** geselecteerd")
+    bulk_status = bc2.selectbox("Status instellen", STATUSES, key="bulk_status_select", label_visibility="collapsed")
+    if bc3.button("✅ Toepassen", type="primary"):
+        for lid in st.session_state.selected_leads:
+            update_status(lid, bulk_status)
+        st.session_state.selected_leads = set()
+        clear_cache()
+        st.rerun()
+
+# ── Paginering ────────────────────────────────────────────────────────────────
+total_leads = len(all_leads)
+total_pages = max(1, (total_leads + PAGE_SIZE - 1) // PAGE_SIZE)
+cur_page    = min(st.session_state.leads_page, total_pages - 1)
+leads       = all_leads[cur_page * PAGE_SIZE:(cur_page + 1) * PAGE_SIZE]
+
+pg_col1, pg_col2, pg_col3 = st.columns([1, 3, 1])
+pg_col2.caption(f"{total_leads} leads · pagina {cur_page + 1} van {total_pages}")
+if pg_col1.button("← Vorige", disabled=cur_page == 0):
+    st.session_state.leads_page = cur_page - 1
+    st.rerun()
+if pg_col3.button("Volgende →", disabled=cur_page >= total_pages - 1):
+    st.session_state.leads_page = cur_page + 1
+    st.rerun()
+
+# ── Tabel ─────────────────────────────────────────────────────────────────────
+if not all_leads:
     st.info("Geen leads gevonden.")
 else:
-    if not client_id:
-        col_sizes = [1.5, 1.5, 2, 2.5, 1.8, 3, 2.5, 0.6]
-        headers   = ["Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+    show_page_col = not client_id
+    if show_page_col:
+        col_sizes = [0.4, 1.5, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5]
+        headers   = ["", "Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
     else:
-        col_sizes = [1.5, 2, 2.5, 1.8, 3, 2.5, 0.6]
-        headers   = ["Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+        col_sizes = [0.4, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5]
+        headers   = ["", "Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
 
-    header = st.columns(col_sizes)
-    for h_col, h_txt in zip(header, headers):
+    hdr = st.columns(col_sizes)
+    for h_col, h_txt in zip(hdr, headers):
         h_col.markdown(f"**{h_txt}**")
-
     st.divider()
+
     for lead in leads:
+        new_badge = " 🆕" if is_new(lead["created_time"]) else ""
         row = st.columns(col_sizes)
-        row[0].caption(fmt_dt(lead["created_time"]))
-        if not client_id:
-            row[1].caption(lead["client_name"] or "—")
-            offset = 2
+        i = 0
+
+        # Checkbox voor bulk
+        checked = lead["id"] in st.session_state.selected_leads
+        if row[i].checkbox("", value=checked, key=f"chk_{lead['id']}", label_visibility="collapsed"):
+            st.session_state.selected_leads.add(lead["id"])
         else:
-            offset = 1
-        row[offset].markdown(lead["full_name"] or "—")
+            st.session_state.selected_leads.discard(lead["id"])
+        i += 1
+
+        # Datum (relatief)
+        row[i].caption(rel_time(lead["created_time"]))
+        i += 1
+
+        # Pagina (alleen in totaaloverzicht)
+        if show_page_col:
+            row[i].caption(lead["client_name"] or "—")
+            i += 1
+
+        # Naam + nieuw-indicator
+        row[i].markdown(f"{lead['full_name'] or '—'}{new_badge}")
+        i += 1
+
+        # E-mail
         if lead["email"]:
-            row[offset + 1].markdown(f"[{lead['email']}](mailto:{lead['email']})")
+            row[i].markdown(f"[{lead['email']}](mailto:{lead['email']})")
         else:
-            row[offset + 1].markdown("—")
-        row[offset + 2].markdown(lead["phone"] or "—")
+            row[i].markdown("—")
+        i += 1
+
+        # Telefoon (klikbaar)
+        if lead["phone"]:
+            row[i].markdown(f"[{lead['phone']}](tel:{lead['phone']})")
+        else:
+            row[i].markdown("—")
+        i += 1
 
         # Formulier antwoorden
         form_data = json.loads(lead["form_data"] or "{}")
         if form_data:
             antwoorden = "  \n".join(f"**{k}:** {v}" for k, v in form_data.items())
-            row[offset + 3].markdown(antwoorden)
+            row[i].markdown(antwoorden)
         else:
-            row[offset + 3].caption("—")
+            row[i].caption("—")
+        i += 1
 
         # Status dropdown
         current_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
-        new_status = row[offset + 4].selectbox(
-            "",
-            options=STATUSES,
-            index=current_idx,
-            key=f"status_{lead['id']}",
-            label_visibility="collapsed",
-        )
+        new_status = row[i].selectbox("", STATUSES, index=current_idx,
+                                      key=f"status_{lead['id']}", label_visibility="collapsed")
         if new_status != lead["status"]:
             update_status(lead["id"], new_status)
             clear_cache()
             st.rerun()
+        i += 1
 
-        if row[offset + 5].button("→", key=f"open_{lead['id']}"):
+        # Detail knop
+        if row[i].button("→", key=f"open_{lead['id']}"):
             st.session_state.selected_lead_id = lead["id"]
             st.session_state.page = "detail"
             st.rerun()
+
+    # Aantekeningen inline (uitklapbaar per lead)
+    st.divider()
+    st.markdown("**📝 Aantekeningen**")
+    for lead in leads:
+        if lead["notes"]:
+            with st.expander(f"{lead['full_name'] or 'Lead'} — notitie"):
+                new_note = st.text_area("", value=lead["notes"], key=f"note_{lead['id']}", label_visibility="collapsed")
+                if st.button("💾 Opslaan", key=f"save_note_{lead['id']}"):
+                    update_notes(lead["id"], new_note)
+                    clear_cache()
+                    st.success("Opgeslagen!")
+
+    # Paginering onderaan
+    st.divider()
+    pg2_col1, pg2_col2, pg2_col3 = st.columns([1, 3, 1])
+    pg2_col2.caption(f"Pagina {cur_page + 1} van {total_pages}")
+    if pg2_col1.button("← Vorige ", disabled=cur_page == 0, key="prev2"):
+        st.session_state.leads_page = cur_page - 1
+        st.rerun()
+    if pg2_col3.button("Volgende → ", disabled=cur_page >= total_pages - 1, key="next2"):
+        st.session_state.leads_page = cur_page + 1
+        st.rerun()
