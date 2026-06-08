@@ -19,9 +19,12 @@ PHONE_KEYWORDS = {"phone", "telefoon", "telefoonnummer", "mobile", "mobiel", "gs
 def _token():
     try:
         import streamlit as st
-        return st.secrets["META_ACCESS_TOKEN"]
+        val = st.secrets.get("META_ACCESS_TOKEN")
+        if val:
+            return val
     except Exception:
-        return os.getenv("META_ACCESS_TOKEN")
+        pass
+    return os.getenv("META_ACCESS_TOKEN")
 
 
 def fetch_all_clients():
@@ -163,3 +166,14 @@ def _process(raw, client_id, form_id):
         "phone":        phone,
         "form_data":    extra,
     })
+
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+    from database import init_db
+    init_db()
+    total, log = fetch_all_clients()
+    for line in log:
+        print(line)
+    print(f"Totaal: {total} nieuwe leads")

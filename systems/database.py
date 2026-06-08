@@ -5,7 +5,12 @@ from contextlib import contextmanager
 
 import psycopg
 from psycopg.rows import dict_row
-import streamlit as st
+
+try:
+    import streamlit as st
+    _HAS_ST = True
+except Exception:
+    _HAS_ST = False
 
 STATUSES = [
     "Review nodig",
@@ -27,13 +32,15 @@ STATUS_COLORS = {
 
 
 def _db_url():
-    try:
-        return st.secrets["DATABASE_URL"]
-    except Exception:
-        url = os.getenv("DATABASE_URL")
-        if not url:
-            raise RuntimeError("DATABASE_URL niet gevonden in secrets of .env")
-        return url
+    if _HAS_ST:
+        try:
+            return st.secrets["DATABASE_URL"]
+        except Exception:
+            pass
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL niet gevonden in secrets of .env")
+    return url
 
 
 def _conn_params():

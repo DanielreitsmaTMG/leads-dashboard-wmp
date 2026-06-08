@@ -1,0 +1,25 @@
+name: Sync Leads
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # Elke 30 minuten
+  workflow_dispatch:           # Ook handmatig te starten via GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests python-dotenv psycopg[binary] apscheduler
+
+      - name: Sync leads
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python systems/fetch_leads.py
