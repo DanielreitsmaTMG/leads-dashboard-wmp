@@ -524,16 +524,19 @@ if not all_leads:
 else:
     show_page_col = not client_id
     if show_page_col:
-        col_sizes = [0.4, 1.5, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5]
-        headers   = ["", "Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+        col_sizes = [0.4, 1.5, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
+        headers   = ["", "Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", "", ""]
     else:
-        col_sizes = [0.4, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5]
-        headers   = ["", "Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", ""]
+        col_sizes = [0.4, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
+        headers   = ["", "Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", "", ""]
 
     hdr = st.columns(col_sizes)
     for h_col, h_txt in zip(hdr, headers):
         h_col.markdown(f"**{h_txt}**")
     st.divider()
+
+    if "open_notes_for" not in st.session_state:
+        st.session_state.open_notes_for = None
 
     for lead in leads:
         new_badge = " 🆕" if is_new(lead["created_time"]) else ""
@@ -594,23 +597,38 @@ else:
             st.rerun()
         i += 1
 
+        # Aantekening knop
+        note_icon = "📝" if lead["notes"] else "🗒️"
+        if row[i].button(note_icon, key=f"note_btn_{lead['id']}", help="Aantekening toevoegen/bewerken"):
+            if st.session_state.open_notes_for == lead["id"]:
+                st.session_state.open_notes_for = None
+            else:
+                st.session_state.open_notes_for = lead["id"]
+            st.rerun()
+        i += 1
+
         # Detail knop
         if row[i].button("→", key=f"open_{lead['id']}"):
             st.session_state.selected_lead_id = lead["id"]
             st.session_state.page = "detail"
             st.rerun()
 
-    # Aantekeningen inline (uitklapbaar per lead)
-    st.divider()
-    st.markdown("**📝 Aantekeningen**")
-    for lead in leads:
-        if lead["notes"]:
-            with st.expander(f"{lead['full_name'] or 'Lead'} — notitie"):
-                new_note = st.text_area("", value=lead["notes"], key=f"note_{lead['id']}", label_visibility="collapsed")
-                if st.button("💾 Opslaan", key=f"save_note_{lead['id']}"):
+        # Inline aantekening direct onder de rij van de lead
+        if st.session_state.open_notes_for == lead["id"]:
+            with st.container(border=True):
+                st.markdown(f"**📝 Aantekening — {lead['full_name'] or 'Lead'}**")
+                new_note = st.text_area("", value=lead["notes"] or "", key=f"note_area_{lead['id']}",
+                                        label_visibility="collapsed", height=100)
+                ncol1, ncol2 = st.columns([1, 5])
+                if ncol1.button("💾 Opslaan", key=f"save_note_{lead['id']}"):
                     update_notes(lead["id"], new_note)
                     clear_cache()
+                    st.session_state.open_notes_for = None
                     st.success("Opgeslagen!")
+                    st.rerun()
+                if ncol2.button("Sluiten", key=f"close_note_{lead['id']}"):
+                    st.session_state.open_notes_for = None
+                    st.rerun()
 
     # Paginering onderaan
     st.divider()
