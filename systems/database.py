@@ -177,9 +177,21 @@ def get_active_form_ids(client_id=None):
 def upsert_lead(data):
     with _conn() as con:
         existing = con.execute(
-            "SELECT id FROM leads WHERE meta_lead_id = %s", (data["meta_lead_id"],)
+            "SELECT id, full_name, email, phone FROM leads WHERE meta_lead_id = %s",
+            (data["meta_lead_id"],)
         ).fetchone()
         if existing:
+            # Update ontbrekende naam/email/telefoon als die nu wel gevonden zijn
+            updates, params = [], []
+            for field in ("full_name", "email", "phone"):
+                if not existing[field] and data.get(field):
+                    updates.append(f"{field} = %s")
+                    params.append(data[field])
+            if updates:
+                params.append(existing["id"])
+                con.execute(
+                    f"UPDATE leads SET {', '.join(updates)} WHERE id = %s", params
+                )
             return
         row = con.execute(
             """INSERT INTO leads

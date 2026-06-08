@@ -8,11 +8,12 @@ from database import get_all_clients, upsert_lead, upsert_form
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
 
-NAME_FIELDS  = {"full_name", "name", "naam", "voornaam"}
-FIRST_FIELDS = {"first_name"}
-LAST_FIELDS  = {"last_name", "achternaam"}
-EMAIL_FIELDS = {"email", "e_mail", "emailadres", "email_address"}
-PHONE_FIELDS = {"phone_number", "phone", "telefoon", "telefoonnummer", "mobile", "mobiel"}
+# Trefwoorden — veld wordt herkend als het sleutelwoord ERGENS in de veldnaam zit
+NAME_KEYWORDS  = {"full_name", "fullname", "naam", "name"}
+FIRST_KEYWORDS = {"first_name", "firstname", "voornaam"}
+LAST_KEYWORDS  = {"last_name", "lastname", "achternaam"}
+EMAIL_KEYWORDS = {"email", "e_mail", "emailadres", "mail"}
+PHONE_KEYWORDS = {"phone", "telefoon", "telefoonnummer", "mobile", "mobiel", "gsm", "tel"}
 
 
 def _token():
@@ -114,29 +115,43 @@ def _fetch_form(form_id, form_name, client_id, token):
     return count, errors
 
 
+def _matches(key, keywords):
+    return any(kw in key for kw in keywords)
+
+
 def _process(raw, client_id, form_id):
     first, last = [], []
     full = email = phone = None
     extra = {}
 
     for field in raw.get("field_data", []):
-        key = field["name"].lower().replace(" ", "_")
+        key = field["name"].lower().replace(" ", "_").replace("-", "_")
         val = (field.get("values") or [""])[0]
-        if key in NAME_FIELDS:
+        if not val:
+            continue
+
+        if _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
             full = val
-        elif key in FIRST_FIELDS:
+        elif _matches(key, FIRST_KEYWORDS):
             first.append(val)
-        elif key in LAST_FIELDS:
+        elif _matches(key, LAST_KEYWORDS):
             last.append(val)
-        elif key in EMAIL_FIELDS:
+        elif _matches(key, EMAIL_KEYWORDS):
             email = val
-        elif key in PHONE_FIELDS:
+        elif _matches(key, PHONE_KEYWORDS):
             phone = val
         else:
             extra[field["name"]] = val
 
+    # Combineer voor- en achternaam als volledige naam ontbreekt
     if not full and (first or last):
         full = " ".join(first + last).strip()
+
+    # Laatste redmiddel: eerste veld gebruiken als naam
+    if not full and raw.get("field_data"):
+        first_val = (raw["field_data"][0].get("values") or [""])[0]
+        if first_val:
+            full = first_val
 
     upsert_lead({
         "meta_lead_id": raw["id"],
