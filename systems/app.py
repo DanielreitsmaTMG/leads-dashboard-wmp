@@ -646,20 +646,20 @@ else:
             row[i].markdown("—")
         i += 1
 
-        # AI-samenvatting i.p.v. ruwe formulierantwoorden
+        # AI-samenvatting i.p.v. ruwe formulierantwoorden — direct tonen, automatisch genereren indien nodig
         form_data = json.loads(lead["form_data"] or "{}")
         if lead["ai_summary"]:
             row[i].markdown(lead["ai_summary"])
         elif form_data:
-            if row[i].button("✨ Samenvatten", key=f"sum_{lead['id']}"):
-                with st.spinner("Bezig..."):
+            with row[i]:
+                with st.spinner("Samenvatting genereren..."):
                     summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"])
                 if summary is None:
-                    st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de secrets.")
+                    st.caption("⚠️ ANTHROPIC_API_KEY ontbreekt")
                 else:
                     update_ai_summary(lead["id"], summary)
-                    clear_cache()
-                    st.rerun()
+                    st.session_state.setdefault("_new_summaries", set()).add(lead["id"])
+                    st.markdown(summary)
         else:
             row[i].caption("—")
         i += 1
@@ -706,6 +706,14 @@ else:
                 if ncol2.button("Sluiten", key=f"close_note_{lead['id']}"):
                     st.session_state.open_notes_for = None
                     st.rerun()
+
+    # Net gegenereerde samenvattingen zijn opgeslagen maar zaten nog niet in de
+    # gecachte queryresultaten — herlaad eenmalig zodat ze direct uit cache komen
+    # i.p.v. dat we ze bij elke rerun opnieuw zouden genereren.
+    if st.session_state.get("_new_summaries"):
+        st.session_state._new_summaries = set()
+        clear_cache()
+        st.rerun()
 
     # Paginering onderaan
     st.divider()
