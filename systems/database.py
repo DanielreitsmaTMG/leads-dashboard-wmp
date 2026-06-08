@@ -36,9 +36,23 @@ def _db_url():
         return url
 
 
+def _conn_params():
+    import urllib.parse
+    p = urllib.parse.urlparse(_db_url())
+    qs = urllib.parse.parse_qs(p.query)
+    return {
+        "host":     p.hostname,
+        "port":     p.port or 5432,
+        "dbname":   p.path.lstrip("/"),
+        "user":     urllib.parse.unquote(p.username),
+        "password": urllib.parse.unquote(p.password),
+        "sslmode":  qs.get("sslmode", ["require"])[0],
+    }
+
+
 @contextmanager
 def _conn():
-    con = psycopg.connect(_db_url(), row_factory=dict_row)
+    con = psycopg.connect(**_conn_params(), row_factory=dict_row)
     try:
         yield con
         con.commit()
