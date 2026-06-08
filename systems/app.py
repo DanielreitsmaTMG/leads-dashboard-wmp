@@ -12,6 +12,7 @@ from database import (
     init_db, get_all_clients, add_client, delete_client,
     get_leads, get_lead, get_status_counts,
     update_status, update_notes,
+    get_forms_for_client, set_form_active,
     STATUSES, STATUS_COLORS,
 )
 from fetch_leads import fetch_all_clients
@@ -218,16 +219,28 @@ if st.session_state.page == "settings":
                 else:
                     st.warning("Vul naam én Page ID in.")
 
-    # ── Actieve clients ───────────────────────────────────────────────────────
-    st.subheader("Actieve clients")
+    # ── Clients + formulieren ─────────────────────────────────────────────────
+    st.subheader("Clients & formulieren")
     clients = get_all_clients()
     if not clients:
         st.info("Nog geen clients toegevoegd.")
     for c in clients:
-        with st.container(border=True):
-            col_a, col_b = st.columns([4, 1])
-            col_a.markdown(f"**{c['name']}**  \n`Page ID: {c['page_id']}`")
-            if col_b.button("🗑️ Verwijder", key=f"del_{c['id']}"):
+        with st.expander(f"**{c['name']}** — `{c['page_id']}`", expanded=True):
+            forms = get_forms_for_client(c["id"])
+            if forms:
+                st.caption("Zet formulieren aan of uit:")
+                for f in forms:
+                    new_val = st.toggle(
+                        f["form_name"] or f["form_id"],
+                        value=bool(f["active"]),
+                        key=f"form_{f['form_id']}",
+                    )
+                    if new_val != bool(f["active"]):
+                        set_form_active(f["form_id"], new_val)
+                        st.rerun()
+            else:
+                st.caption("Nog geen formulieren — klik op 🔄 Vernieuwen om ze op te halen.")
+            if st.button("🗑️ Client verwijderen", key=f"del_{c['id']}"):
                 delete_client(c["id"])
                 st.rerun()
 

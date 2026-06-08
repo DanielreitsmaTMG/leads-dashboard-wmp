@@ -1,10 +1,10 @@
 import requests
 import os
 import sys
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
-from database import get_all_clients, upsert_lead
+from database import get_all_clients, upsert_lead, upsert_form
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
 
@@ -34,16 +34,24 @@ def fetch_all_clients():
 
     total = 0
     log = []
-    for client in clients:
-        count, errors = _fetch_client(client["id"], client["page_id"], client["name"], token)
-        total += count
-        log.append(f"**{client['name']}**: {count} leads opgehaald")
-        log.extend([f"  ⚠️ {e}" for e in errors])
+
+    # Alle clients parallel ophalen
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(_fetch_client, c["id"], c["page_id"], c["name"], token): c["name"]
+            for c in clients
+        }
+        for future in as_completed(futures):
+            name = futures[future]
+            count, errors = future.result()
+            total += count
+            log.append(f"**{name}**: {count} nieuwe leads opgehaald")
+            log.extend([f"  ⚠️ {e}" for e in errors])
+
     return total, log
 
 
 def _get_page_token(page_id, user_token):
-    """Wissel user/system token in voor een page access token."""
     r = requests.get(
         f"{META_API_BASE}/{page_id}",
         params={"fields": "access_token", "access_token": user_token},
@@ -57,23 +65,26 @@ def _get_page_token(page_id, user_token):
 
 def _fetch_client(client_id, page_id, client_name, token):
     errors = []
-    # Haal page access token op
     page_token, err = _get_page_token(page_id, token)
     if not page_token:
-        return 0, [f"Page token ophalen mislukt: {err}"]
+        return 0, [f"Page token ophalen mislukt voor {client_name}: {err}"]
 
     url = f"{META_API_BASE}/{page_id}/leadgen_forms"
     try:
         r = requests.get(url, params={"access_token": page_token, "fields": "id,name", "limit": 100}, timeout=30)
         data = r.json()
         if "error" in data:
-            return 0, [f"Formulieren ophalen mislukt: {data['error'].get('message', data['error'])}"]
+            return 0, [f"Formulieren ophalen mislukt voor {client_name}: {data['error'].get('message')}"]
         forms = data.get("data", [])
         if not forms:
-            return 0, [f"Geen leadformulieren gevonden op pagina {page_id}"]
+            return 0, [f"Geen leadformulieren gevonden voor {client_name} (pagina {page_id})"]
+
         count = 0
         for form in forms:
-            c, e = _fetch_form(form["id"], form.get("name", form["id"]), client_id, page_token)
+            form_id   = form["id"]
+            form_name = form.get("name", form_id)
+            upsert_form(client_id, form_id, form_name)
+            c, e = _fetch_form(form_id, form_name, client_id, page_token)
             count += c
             errors.extend(e)
         return count, errors
@@ -91,10 +102,10 @@ def _fetch_form(form_id, form_name, client_id, token):
             r = requests.get(url, params=params, timeout=30)
             data = r.json()
             if "error" in data:
-                errors.append(f"Formulier '{form_name}': {data['error'].get('message', data['error'])}")
+                errors.append(f"Formulier '{form_name}': {data['error'].get('message')}")
                 break
             for lead in data.get("data", []):
-                _process(lead, client_id)
+                _process(lead, client_id, form_id)
                 count += 1
             url = data.get("paging", {}).get("next")
             params = {}
@@ -103,7 +114,7 @@ def _fetch_form(form_id, form_name, client_id, token):
     return count, errors
 
 
-def _process(raw, client_id):
+def _process(raw, client_id, form_id):
     first, last = [], []
     full = email = phone = None
     extra = {}
@@ -130,6 +141,7 @@ def _process(raw, client_id):
     upsert_lead({
         "meta_lead_id": raw["id"],
         "client_id":    client_id,
+        "form_id":      form_id,
         "created_time": raw.get("created_time"),
         "full_name":    full,
         "email":        email,

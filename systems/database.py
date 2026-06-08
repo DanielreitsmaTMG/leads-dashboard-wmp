@@ -78,10 +78,20 @@ def init_db():
             )
         """)
         con.execute("""
+            CREATE TABLE IF NOT EXISTS forms (
+                id         SERIAL PRIMARY KEY,
+                client_id  INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+                form_id    TEXT NOT NULL UNIQUE,
+                form_name  TEXT,
+                active     BOOLEAN DEFAULT TRUE
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS leads (
                 id                SERIAL PRIMARY KEY,
                 meta_lead_id      TEXT UNIQUE NOT NULL,
                 client_id         INTEGER REFERENCES clients(id),
+                form_id           TEXT,
                 created_time      TEXT,
                 full_name         TEXT,
                 email             TEXT,
@@ -92,6 +102,10 @@ def init_db():
                 notes             TEXT DEFAULT '',
                 inserted_at       TIMESTAMP DEFAULT NOW()
             )
+        """)
+        # Voeg form_id kolom toe als die nog niet bestaat (migratie)
+        con.execute("""
+            ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_id TEXT
         """)
         con.execute("""
             CREATE TABLE IF NOT EXISTS status_history (
@@ -123,6 +137,41 @@ def delete_client(client_id):
         con.execute("DELETE FROM clients WHERE id = %s", (client_id,))
 
 
+# ── Forms ─────────────────────────────────────────────────────────────────────
+
+def upsert_form(client_id, form_id, form_name):
+    with _conn() as con:
+        con.execute("""
+            INSERT INTO forms (client_id, form_id, form_name)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (form_id) DO UPDATE SET form_name = EXCLUDED.form_name
+        """, (client_id, form_id, form_name))
+
+
+def get_forms_for_client(client_id):
+    with _conn() as con:
+        return con.execute(
+            "SELECT * FROM forms WHERE client_id = %s ORDER BY form_name",
+            (client_id,)
+        ).fetchall()
+
+
+def set_form_active(form_id, active):
+    with _conn() as con:
+        con.execute("UPDATE forms SET active = %s WHERE form_id = %s", (active, form_id))
+
+
+def get_active_form_ids(client_id=None):
+    with _conn() as con:
+        if client_id:
+            rows = con.execute(
+                "SELECT form_id FROM forms WHERE active = TRUE AND client_id = %s", (client_id,)
+            ).fetchall()
+        else:
+            rows = con.execute("SELECT form_id FROM forms WHERE active = TRUE").fetchall()
+    return {r["form_id"] for r in rows}
+
+
 # ── Leads ─────────────────────────────────────────────────────────────────────
 
 def upsert_lead(data):
@@ -134,13 +183,14 @@ def upsert_lead(data):
             return
         row = con.execute(
             """INSERT INTO leads
-               (meta_lead_id, client_id, created_time, full_name, email, phone,
+               (meta_lead_id, client_id, form_id, created_time, full_name, email, phone,
                 form_data, status, status_updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, 'Review nodig', NOW())
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Review nodig', NOW())
                RETURNING id""",
             (
                 data["meta_lead_id"],
                 data["client_id"],
+                data.get("form_id"),
                 data["created_time"],
                 data["full_name"],
                 data["email"],
@@ -173,10 +223,11 @@ def update_notes(lead_id, notes):
 
 def get_leads(client_id=None, status_filter=None, search=None):
     query = """
-        SELECT l.*, c.name AS client_name
+        SELECT l.*, c.name AS client_name, f.form_name
         FROM leads l
         LEFT JOIN clients c ON l.client_id = c.id
-        WHERE 1=1
+        LEFT JOIN forms f ON l.form_id = f.form_id
+        WHERE (l.form_id IS NULL OR f.active = TRUE OR f.form_id IS NULL)
     """
     params = []
     if client_id:
