@@ -115,10 +115,61 @@ with st.sidebar:
 if st.session_state.page == "settings":
     st.title("⚙️ Instellingen")
 
-    col1, col2 = st.columns([1, 1], gap="large")
+    # ── Token status ──────────────────────────────────────────────────────────
+    from fetch_leads import _token
+    token = _token()
+    if token:
+        st.success("✅ Meta Access Token is ingesteld.")
+    else:
+        st.error("❌ Meta Access Token ontbreekt. Voeg `META_ACCESS_TOKEN` toe aan Streamlit Secrets.")
 
-    with col1:
-        st.subheader("Client toevoegen")
+    st.divider()
+
+    # ── Pagina's ontdekken via Meta API ───────────────────────────────────────
+    st.subheader("📄 Pagina's ontdekken")
+    if token:
+        if st.button("🔍 Haal al mijn pagina's op uit Meta", type="primary"):
+            import requests
+            try:
+                r = requests.get(
+                    "https://graph.facebook.com/v21.0/me/accounts",
+                    params={"access_token": token, "limit": 100},
+                    timeout=15,
+                )
+                r.raise_for_status()
+                pages = r.json().get("data", [])
+                st.session_state["discovered_pages"] = pages
+            except Exception as e:
+                st.error(f"Fout bij ophalen pagina's: {e}")
+
+        if "discovered_pages" in st.session_state:
+            pages = st.session_state["discovered_pages"]
+            existing_ids = {c["page_id"] for c in get_all_clients()}
+            new_pages = [p for p in pages if p["id"] not in existing_ids]
+
+            if not pages:
+                st.warning("Geen pagina's gevonden. Controleer of je token `pages_show_list` rechten heeft.")
+            else:
+                st.caption(f"{len(pages)} pagina's gevonden — {len(new_pages)} nog niet toegevoegd")
+                for page in pages:
+                    already = page["id"] in existing_ids
+                    col_a, col_b = st.columns([4, 1])
+                    col_a.markdown(f"**{page['name']}**  \n`{page['id']}`")
+                    if already:
+                        col_b.markdown("✅ Actief")
+                    else:
+                        if col_b.button("➕ Toevoegen", key=f"add_page_{page['id']}"):
+                            add_client(page["name"], page["id"])
+                            st.success(f"'{page['name']}' toegevoegd!")
+                            st.session_state.pop("discovered_pages", None)
+                            st.rerun()
+    else:
+        st.info("Stel eerst een geldig Meta Access Token in om pagina's op te halen.")
+
+    st.divider()
+
+    # ── Handmatig toevoegen ───────────────────────────────────────────────────
+    with st.expander("✏️ Client handmatig toevoegen"):
         with st.form("add_client_form"):
             name    = st.text_input("Naam client", placeholder="bijv. Werken met Passie")
             page_id = st.text_input("Facebook Page ID", placeholder="bijv. 123456789012345")
@@ -130,26 +181,19 @@ if st.session_state.page == "settings":
                 else:
                     st.warning("Vul naam én Page ID in.")
 
-    with col2:
-        st.subheader("Actieve clients")
-        clients = get_all_clients()
-        if not clients:
-            st.info("Nog geen clients toegevoegd.")
-        for c in clients:
-            with st.container(border=True):
-                col_a, col_b = st.columns([3, 1])
-                col_a.markdown(f"**{c['name']}**  \n`Page ID: {c['page_id']}`")
-                if col_b.button("🗑️", key=f"del_{c['id']}", help="Verwijder client"):
-                    delete_client(c["id"])
-                    st.rerun()
+    # ── Actieve clients ───────────────────────────────────────────────────────
+    st.subheader("Actieve clients")
+    clients = get_all_clients()
+    if not clients:
+        st.info("Nog geen clients toegevoegd.")
+    for c in clients:
+        with st.container(border=True):
+            col_a, col_b = st.columns([4, 1])
+            col_a.markdown(f"**{c['name']}**  \n`Page ID: {c['page_id']}`")
+            if col_b.button("🗑️ Verwijder", key=f"del_{c['id']}"):
+                delete_client(c["id"])
+                st.rerun()
 
-    st.divider()
-    st.subheader("🔑 API Token")
-    st.info(
-        "Zet je Meta Access Token in het `.env` bestand naast dit project:\n\n"
-        "```\nMETA_ACCESS_TOKEN=jouw_token_hier\n```\n\n"
-        "Instructies: zie `blueprints/meta_token.md`"
-    )
     st.stop()
 
 
