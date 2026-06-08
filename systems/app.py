@@ -593,10 +593,10 @@ else:
     show_page_col = not client_id
     if show_page_col:
         col_sizes = [0.4, 1.5, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
-        headers   = ["", "Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", "", ""]
+        headers   = ["", "Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
     else:
         col_sizes = [0.4, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
-        headers   = ["", "Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", "", ""]
+        headers   = ["", "Datum", "Naam", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
 
     hdr = st.columns(col_sizes)
     for h_col, h_txt in zip(hdr, headers):
@@ -646,11 +646,20 @@ else:
             row[i].markdown("—")
         i += 1
 
-        # Formulier antwoorden
+        # AI-samenvatting i.p.v. ruwe formulierantwoorden
         form_data = json.loads(lead["form_data"] or "{}")
-        if form_data:
-            antwoorden = "  \n".join(f"**{k}:** {v}" for k, v in form_data.items())
-            row[i].markdown(antwoorden)
+        if lead["ai_summary"]:
+            row[i].markdown(lead["ai_summary"])
+        elif form_data:
+            if row[i].button("✨ Samenvatten", key=f"sum_{lead['id']}"):
+                with st.spinner("Bezig..."):
+                    summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data)
+                if summary is None:
+                    st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de secrets.")
+                else:
+                    update_ai_summary(lead["id"], summary)
+                    clear_cache()
+                    st.rerun()
         else:
             row[i].caption("—")
         i += 1
