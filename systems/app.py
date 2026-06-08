@@ -17,6 +17,29 @@ from database import (
 )
 from fetch_leads import fetch_all_clients
 
+
+@st.cache_data(ttl=120, show_spinner=False)
+def cached_clients():
+    return get_all_clients()
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_leads(client_id, status_filter, search, days):
+    return get_leads(client_id=client_id, status_filter=status_filter, search=search, days=days)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_counts(client_id):
+    return get_status_counts(client_id)
+
+@st.cache_data(ttl=120, show_spinner=False)
+def cached_forms(client_id):
+    return get_forms_for_client(client_id)
+
+def clear_cache():
+    cached_clients.clear()
+    cached_leads.clear()
+    cached_counts.clear()
+    cached_forms.clear()
+
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # ── Eenmalig: DB + scheduler ──────────────────────────────────────────────────
@@ -76,7 +99,7 @@ with st.sidebar:
     st.divider()
 
     st.markdown("**Clients**")
-    clients = get_all_clients()
+    clients = cached_clients()
 
     if st.button("🌐 Alle clients", use_container_width=True,
                  type="primary" if st.session_state.active_client_id is None and st.session_state.page == "leads" else "secondary"):
@@ -98,6 +121,7 @@ with st.sidebar:
     if st.button("🔄 Vernieuwen", use_container_width=True):
         with st.spinner("Leads ophalen..."):
             n, log = fetch_all_clients()
+            clear_cache()
             for line in log:
                 if "⚠️" in line:
                     st.warning(line)
@@ -182,7 +206,7 @@ if st.session_state.page == "settings":
 
         if "discovered_pages" in st.session_state:
             pages = st.session_state["discovered_pages"]
-            existing_ids = {c["page_id"] for c in get_all_clients()}
+            existing_ids = {c["page_id"] for c in cached_clients()}
             new_pages = [p for p in pages if p["id"] not in existing_ids]
 
             if not pages:
@@ -198,6 +222,7 @@ if st.session_state.page == "settings":
                     else:
                         if col_b.button("➕ Toevoegen", key=f"add_page_{page['id']}"):
                             add_client(page["name"], page["id"])
+                            clear_cache()
                             st.success(f"'{page['name']}' toegevoegd!")
                             st.session_state.pop("discovered_pages", None)
                             st.rerun()
@@ -214,6 +239,7 @@ if st.session_state.page == "settings":
             if st.form_submit_button("➕ Toevoegen", type="primary"):
                 if name and page_id:
                     add_client(name.strip(), page_id.strip())
+                    clear_cache()
                     st.success(f"'{name}' toegevoegd!")
                     st.rerun()
                 else:
@@ -221,12 +247,12 @@ if st.session_state.page == "settings":
 
     # ── Clients + formulieren ─────────────────────────────────────────────────
     st.subheader("Clients & formulieren")
-    clients = get_all_clients()
+    clients = cached_clients()
     if not clients:
         st.info("Nog geen clients toegevoegd.")
     for c in clients:
         with st.expander(f"**{c['name']}** — `{c['page_id']}`", expanded=True):
-            forms = get_forms_for_client(c["id"])
+            forms = cached_forms(c["id"])
             if forms:
                 st.caption("Zet formulieren aan of uit:")
                 for f in forms:
@@ -237,11 +263,13 @@ if st.session_state.page == "settings":
                     )
                     if new_val != bool(f["active"]):
                         set_form_active(f["form_id"], new_val)
+                        clear_cache()
                         st.rerun()
             else:
                 st.caption("Nog geen formulieren — klik op 🔄 Vernieuwen om ze op te halen.")
             if st.button("🗑️ Client verwijderen", key=f"del_{c['id']}"):
                 delete_client(c["id"])
+                clear_cache()
                 st.rerun()
 
     st.stop()
@@ -304,6 +332,7 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
                          type="primary" if is_current else "secondary",
                          key=f"status_{s}"):
                 update_status(lead["id"], s)
+                clear_cache()
                 st.rerun()
 
         st.subheader("🕒 Geschiedenis")
@@ -334,7 +363,7 @@ else:
     st.title("🌐 Alle clients")
 
 # Statuskaarten
-counts = get_status_counts(client_id)
+counts = cached_counts(client_id)
 total  = sum(counts.values())
 cols   = st.columns(len(STATUSES) + 1)
 cols[0].metric("Totaal", total)
@@ -362,7 +391,7 @@ search        = col_f3.text_input("Zoeken", placeholder="Naam, e-mail of telefoo
 
 days = PERIODE_OPTIES[periode]
 
-leads = get_leads(
+leads = cached_leads(
     client_id=client_id,
     status_filter=status_filter if status_filter != "Alle" else None,
     search=search or None,
@@ -421,6 +450,7 @@ else:
         )
         if new_status != lead["status"]:
             update_status(lead["id"], new_status)
+            clear_cache()
             st.rerun()
 
         if row[offset + 5].button("→", key=f"open_{lead['id']}"):
