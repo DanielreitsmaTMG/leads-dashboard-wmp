@@ -165,8 +165,18 @@ if st.session_state.page == "settings":
                                     seen_ids.add(page["id"])
 
                 st.session_state["discovered_pages"] = pages
+                # Debug output
+                st.session_state["debug_me"] = r.json()
+                st.session_state["debug_biz"] = biz_r.json()
             except Exception as e:
                 st.error(f"Fout bij ophalen pagina's: {e}")
+
+        if "debug_me" in st.session_state:
+            with st.expander("🔧 Debug: /me/accounts"):
+                st.json(st.session_state["debug_me"])
+        if "debug_biz" in st.session_state:
+            with st.expander("🔧 Debug: /me/businesses"):
+                st.json(st.session_state["debug_biz"])
 
         if "discovered_pages" in st.session_state:
             pages = st.session_state["discovered_pages"]
