@@ -75,10 +75,20 @@ dit is een eerste, losstaande stap; een volledige geautomatiseerde intake-conver
 
 Functies:
 
-1. **AI-samenvatting per lead** — knop in de leaddetailpagina ("✨ Genereer samenvatting").
-   Stuurt de formulierantwoorden naar Claude (`claude-haiku-4-5`) en slaat een korte
-   profielomschrijving + matchinschatting op in `leads.ai_summary` / `ai_summary_at`.
-   Wordt NIET automatisch gegenereerd (kost API-credits) — alleen op aanvraag van de recruiter.
+1. **AI-samenvatting per lead** — wordt nu AUTOMATISCH gegenereerd op het moment dat
+   `systems/fetch_leads.py` een nieuwe lead binnenhaalt (in `_process()`, direct na
+   `upsert_lead()`, alleen als de lead formulierantwoorden heeft). Dit loopt dus mee
+   in de bestaande GitHub Actions sync (elke 30 min) — de samenvatting staat al klaar
+   zodra de recruiter de lead voor het eerst opent, geen wachttijd in de browser.
+   Resultaat wordt opgeslagen in `leads.ai_summary` / `ai_summary_at`.
+
+   Als fallback (bv. voor leads die zijn binnengekomen vóórdat deze functie bestond,
+   of als de sync de samenvatting om wat voor reden dan ook miste) genereert het
+   dashboard zelf alsnog automatisch een samenvatting bij het tonen van de leadstabel
+   en de detailpagina — zie `summarize_lead()`-aanroepen in `app.py`.
+
+   `upsert_lead()` retourneert nu `(lead_id, is_new)` zodat `_process()` weet of het
+   om een nieuwe lead gaat (en dus alleen dán een samenvatting hoeft te genereren).
 
 2. **Follow-up signalering** — bovenaan het leadsoverzicht verschijnt een waarschuwing
    zodra er leads zijn die langer dan 24 uur op status "Review nodig" staan
@@ -92,10 +102,11 @@ Functies:
 ### Benodigde secret
 
 `ANTHROPIC_API_KEY` — moet worden toegevoegd aan:
-- Lokale `.env` (voor CLI-gebruik)
-- Streamlit Cloud secrets (Manage app → Settings → Secrets)
-- Eventueel GitHub Actions secrets, als AI-verwerking ooit via de cron-sync gaat lopen
-  (nu gebeurt dit alleen interactief, dus dit is vooralsnog niet nodig)
+- Lokale `.env` (voor CLI-gebruik) ✅
+- Streamlit Cloud secrets (Manage app → Settings → Secrets) ✅
+- **GitHub Actions secrets** (Settings → Secrets and variables → Actions) — VEREIST,
+  want de samenvatting wordt nu gegenereerd tijdens de cron-sync (`sync_leads.yml`
+  geeft `ANTHROPIC_API_KEY` door als env-variabele aan `fetch_leads.py`)
 
 Zonder deze key tonen de AI-knoppen een duidelijke melding ("ANTHROPIC_API_KEY ontbreekt")
 in plaats van te crashen — zie `_client()` in `ai_assistant.py`.

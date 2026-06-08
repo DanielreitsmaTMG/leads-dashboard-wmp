@@ -197,7 +197,7 @@ def upsert_lead(data):
             if updates:
                 params.append(existing["id"])
                 con.execute(f"UPDATE leads SET {', '.join(updates)} WHERE id = %s", params)
-            return
+            return existing["id"], False
         row = con.execute(
             """INSERT INTO leads
                (meta_lead_id, client_id, form_id, created_time, full_name, email, phone,
@@ -220,6 +220,7 @@ def upsert_lead(data):
             "INSERT INTO status_history (lead_id, status) VALUES (%s, 'Review nodig')",
             (row["id"],),
         )
+        return row["id"], True
 
 
 def update_status(lead_id, status):

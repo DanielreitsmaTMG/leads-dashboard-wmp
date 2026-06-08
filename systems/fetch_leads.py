@@ -4,7 +4,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
-from database import get_all_clients, upsert_lead, upsert_form
+from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary
+from ai_assistant import summarize_lead
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
 
@@ -89,7 +90,7 @@ def _fetch_client(client_id, page_id, client_name, token):
             form_id   = form["id"]
             form_name = form.get("name", form_id)
             upsert_form(client_id, form_id, form_name)
-            c, e = _fetch_form(form_id, form_name, client_id, page_token)
+            c, e = _fetch_form(form_id, form_name, client_id, client_name, page_token)
             count += c
             errors.extend(e)
         return count, errors
@@ -97,7 +98,7 @@ def _fetch_client(client_id, page_id, client_name, token):
         return 0, [str(e)]
 
 
-def _fetch_form(form_id, form_name, client_id, token):
+def _fetch_form(form_id, form_name, client_id, client_name, token):
     url = f"{META_API_BASE}/{form_id}/leads"
     params = {"access_token": token, "fields": "id,created_time,field_data", "limit": 100}
     count = 0
@@ -110,7 +111,7 @@ def _fetch_form(form_id, form_name, client_id, token):
                 errors.append(f"Formulier '{form_name}': {data['error'].get('message')}")
                 break
             for lead in data.get("data", []):
-                _process(lead, client_id, form_id)
+                _process(lead, client_id, client_name, form_id)
                 count += 1
             url = data.get("paging", {}).get("next")
             params = {}
@@ -123,7 +124,7 @@ def _matches(key, keywords):
     return any(kw in key for kw in keywords)
 
 
-def _process(raw, client_id, form_id):
+def _process(raw, client_id, client_name, form_id):
     first, last = [], []
     full = email = phone = vacancy = None
     extra = {}
@@ -159,7 +160,7 @@ def _process(raw, client_id, form_id):
         if first_val:
             full = first_val
 
-    upsert_lead({
+    lead_id, is_new = upsert_lead({
         "meta_lead_id": raw["id"],
         "client_id":    client_id,
         "form_id":      form_id,
@@ -170,6 +171,16 @@ def _process(raw, client_id, form_id):
         "vacancy_name": vacancy,
         "form_data":    extra,
     })
+
+    # Genereer direct een AI-samenvatting voor nieuwe leads met formulierantwoorden,
+    # zodat deze al klaarstaat zodra de recruiter het dashboard opent.
+    if is_new and extra:
+        try:
+            summary = summarize_lead(full, vacancy, extra, client_name)
+            if summary and not summary.startswith("⚠️"):
+                update_ai_summary(lead_id, summary)
+        except Exception:
+            pass  # AI-samenvatting is een extraatje — sync mag hier niet op stranden
 
 
 if __name__ == "__main__":
