@@ -111,7 +111,7 @@ def _fetch_form(form_id, form_name, client_id, client_name, token):
                 errors.append(f"Formulier '{form_name}': {data['error'].get('message')}")
                 break
             for lead in data.get("data", []):
-                _process(lead, client_id, client_name, form_id)
+                _process(lead, client_id, client_name, form_id, form_name)
                 count += 1
             url = data.get("paging", {}).get("next")
             params = {}
@@ -124,7 +124,7 @@ def _matches(key, keywords):
     return any(kw in key for kw in keywords)
 
 
-def _process(raw, client_id, client_name, form_id):
+def _process(raw, client_id, client_name, form_id, form_name=None):
     first, last = [], []
     full = email = phone = vacancy = None
     extra = {}
@@ -159,6 +159,12 @@ def _process(raw, client_id, client_name, form_id):
         first_val = (raw["field_data"][0].get("values") or [""])[0]
         if first_val:
             full = first_val
+
+    # Vacature: als er geen expliciet "Vacaturenaam"-veld is ingevuld, val terug op de
+    # naam van het leadformulier zelf — zo is er altijd een concrete vacature-referentie
+    # beschikbaar voor weergave én voor de AI-samenvatting/matchmaker.
+    if not vacancy:
+        vacancy = form_name
 
     lead_id, is_new = upsert_lead({
         "meta_lead_id": raw["id"],

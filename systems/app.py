@@ -418,6 +418,8 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
         st.markdown(f"## {lead['full_name'] or 'Onbekende naam'}")
         if lead["client_name"]:
             st.caption(f"Client: {lead['client_name']}")
+        if lead["vacancy_name"]:
+            st.caption(f"💼 Gesolliciteerd op: {lead['vacancy_name']}")
 
         st.markdown(f"**Status:** {BADGE_EMOJI.get(lead['status'], '')} {lead['status']}")
 
@@ -614,11 +616,11 @@ if not all_leads:
 else:
     show_page_col = not client_id
     if show_page_col:
-        col_sizes = [0.4, 1.5, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
-        headers   = ["", "Datum", "Pagina", "Naam", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
+        col_sizes = [0.4, 1.5, 1.5, 2, 1.8, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
+        headers   = ["", "Datum", "Pagina", "Naam", "Vacature", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
     else:
-        col_sizes = [0.4, 1.5, 2, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
-        headers   = ["", "Datum", "Naam", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
+        col_sizes = [0.4, 1.5, 2, 1.8, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
+        headers   = ["", "Datum", "Naam", "Vacature", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
 
     hdr = st.columns(col_sizes)
     for h_col, h_txt in zip(hdr, headers):
@@ -652,6 +654,11 @@ else:
 
         # Naam + nieuw-indicator
         row[i].markdown(f"{lead['full_name'] or '—'}{new_badge}")
+        i += 1
+
+        # Vacature waarop gesolliciteerd is (vacancy_name veld, anders formuliernaam als fallback)
+        vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
+        row[i].caption(f"💼 {vacature_label}" if vacature_label != "—" else "—")
         i += 1
 
         # E-mail
