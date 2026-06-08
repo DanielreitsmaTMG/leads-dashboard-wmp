@@ -360,14 +360,14 @@ st.caption(f"{len(leads)} leads gevonden")
 if not leads:
     st.info("Geen leads gevonden.")
 else:
-    header = st.columns([1.5, 2, 2.5, 1.8, 2, 1.5, 0.6])
-    headers = ["Datum", "Naam", "E-mail", "Telefoon", "Status", "Laatste update", ""]
+    header = st.columns([1.5, 2, 2.5, 1.8, 3, 2, 1.5, 0.6])
+    headers = ["Datum", "Naam", "E-mail", "Telefoon", "Antwoorden", "Status", "Laatste update", ""]
     for h_col, h_txt in zip(header, headers):
         h_col.markdown(f"**{h_txt}**")
 
     st.divider()
     for lead in leads:
-        row = st.columns([1.5, 2, 2.5, 1.8, 2, 1.5, 0.6])
+        row = st.columns([1.5, 2, 2.5, 1.8, 3, 2, 1.5, 0.6])
         row[0].caption(fmt_dt(lead["created_time"]))
         row[1].markdown(lead["full_name"] or "—")
         if lead["email"]:
@@ -375,9 +375,20 @@ else:
         else:
             row[2].markdown("—")
         row[3].markdown(lead["phone"] or "—")
-        row[4].markdown(f"{BADGE_EMOJI.get(lead['status'], '')} {lead['status']}")
-        row[5].caption(fmt_dt(lead["status_updated_at"]))
-        if row[6].button("→", key=f"open_{lead['id']}"):
+
+        # Formulier antwoorden
+        form_data = json.loads(lead["form_data"] or "{}")
+        if form_data:
+            antwoorden = "  \n".join(
+                f"**{k}:** {v}" for k, v in form_data.items()
+            )
+            row[4].markdown(antwoorden)
+        else:
+            row[4].caption("—")
+
+        row[5].markdown(f"{BADGE_EMOJI.get(lead['status'], '')} {lead['status']}")
+        row[6].caption(fmt_dt(lead["status_updated_at"]))
+        if row[7].button("→", key=f"open_{lead['id']}"):
             st.session_state.selected_lead_id = lead["id"]
             st.session_state.page = "detail"
             st.rerun()
