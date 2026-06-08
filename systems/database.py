@@ -113,6 +113,8 @@ def init_db():
         # Migraties
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_id TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS vacancy_name TEXT")
+        con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary TEXT")
+        con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary_at TIMESTAMP")
         con.execute("""
             CREATE TABLE IF NOT EXISTS status_history (
                 id         SERIAL PRIMARY KEY,
@@ -235,6 +237,32 @@ def update_status(lead_id, status):
 def update_notes(lead_id, notes):
     with _conn() as con:
         con.execute("UPDATE leads SET notes = %s WHERE id = %s", (notes, lead_id))
+
+
+def update_ai_summary(lead_id, summary):
+    with _conn() as con:
+        con.execute(
+            "UPDATE leads SET ai_summary = %s, ai_summary_at = NOW() WHERE id = %s",
+            (summary, lead_id),
+        )
+
+
+def get_stale_leads(client_id=None, status="Review nodig", hours=24):
+    """Leads die al langer dan `hours` uur in `status` staan (op basis van status_updated_at)."""
+    query = """
+        SELECT l.*, c.name AS client_name
+        FROM leads l
+        LEFT JOIN clients c ON l.client_id = c.id
+        WHERE l.status = %s
+          AND l.status_updated_at <= NOW() - make_interval(hours => %s)
+    """
+    params = [status, hours]
+    if client_id:
+        query += " AND l.client_id = %s"
+        params.append(client_id)
+    query += " ORDER BY l.status_updated_at ASC"
+    with _conn() as con:
+        return con.execute(query, params).fetchall()
 
 
 def get_vacancies_for_client(client_id):

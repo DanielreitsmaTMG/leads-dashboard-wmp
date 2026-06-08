@@ -14,9 +14,11 @@ from database import (
     update_status, update_notes,
     get_forms_for_client, set_form_active,
     get_vacancies_for_client,
+    update_ai_summary, get_stale_leads,
     STATUSES, STATUS_COLORS,
 )
 from fetch_leads import fetch_all_clients
+from ai_assistant import summarize_lead, suggest_vacancy_text
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -39,12 +41,17 @@ def cached_counts(client_id):
 def cached_forms(client_id):
     return get_forms_for_client(client_id)
 
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_stale_leads(client_id, hours=24):
+    return get_stale_leads(client_id=client_id, status="Review nodig", hours=hours)
+
 def clear_cache():
     cached_clients.clear()
     cached_leads.clear()
     cached_counts.clear()
     cached_forms.clear()
     cached_vacancies.clear()
+    cached_stale_leads.clear()
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -333,6 +340,36 @@ if st.session_state.page == "settings":
                 clear_cache()
                 st.rerun()
 
+    st.divider()
+
+    # ── AI-vacaturetekst-assistent ────────────────────────────────────────────
+    st.subheader("✨ AI-vacaturetekst-assistent")
+    st.caption("Genereer een conceptvacaturetekst op basis van een korte briefing — handig als startpunt, controleer en pas aan voor publicatie.")
+    with st.form("vacancy_text_form"):
+        v_titel = st.text_input("Functietitel", placeholder="bijv. Onderhoudsschilder")
+        v_punten = st.text_area(
+            "Kernpunten (eisen, aanbod, bijzonderheden — los meegeven, AI verwerkt het tot lopende tekst)",
+            placeholder="bijv. ervaring met buitenschilderwerk, rijbewijs B, fulltime, marktconform salaris, doorgroeimogelijkheden...",
+            height=100,
+        )
+        v_toon = st.selectbox("Toon", ["professioneel en uitnodigend", "informeel en enthousiast", "zakelijk en to-the-point"])
+        v_submit = st.form_submit_button("✨ Genereer concept", type="primary")
+
+    if v_submit:
+        if not v_titel.strip():
+            st.warning("Vul minimaal een functietitel in.")
+        else:
+            with st.spinner("Concepttekst wordt geschreven..."):
+                tekst = suggest_vacancy_text(v_titel, v_punten or "(geen aanvullende punten meegegeven)", v_toon)
+            if tekst is None:
+                st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de Streamlit secrets om deze functie te gebruiken.")
+            else:
+                st.session_state["_vacancy_draft"] = tekst
+
+    if st.session_state.get("_vacancy_draft"):
+        st.text_area("Conceptvacaturetekst (kopieer en pas aan waar nodig)",
+                     value=st.session_state["_vacancy_draft"], height=350, key="_vacancy_draft_view")
+
     st.stop()
 
 
@@ -376,6 +413,24 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
 
             for key, val in form_data.items():
                 st.markdown(f"**{key}**  \n{val}")
+
+        st.subheader("🤖 AI-samenvatting")
+        if lead["ai_summary"]:
+            st.info(lead["ai_summary"])
+            st.caption(f"Gegenereerd: {fmt_dt(lead['ai_summary_at'])}")
+            btn_label = "🔄 Opnieuw genereren"
+        else:
+            st.caption("Nog geen samenvatting gegenereerd voor deze lead.")
+            btn_label = "✨ Genereer samenvatting"
+        if st.button(btn_label, key="gen_summary"):
+            with st.spinner("Bezig met analyseren..."):
+                summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data)
+            if summary is None:
+                st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de secrets om deze functie te gebruiken.")
+            else:
+                update_ai_summary(lead["id"], summary)
+                clear_cache()
+                st.rerun()
 
         st.subheader("📝 Aantekeningen")
         notes_val = st.text_area("", value=lead["notes"] or "", height=150, label_visibility="collapsed")
@@ -427,6 +482,19 @@ elif client_id:
     st.title(f"👤 {client_name}")
 else:
     st.title("🌐 Alle clients")
+
+# ── Follow-up signalering: leads die te lang wachten op opvolging ────────────
+stale = cached_stale_leads(client_id, hours=24)
+if stale:
+    names = ", ".join(
+        f"{(s['full_name'] or 'Onbekend')} ({s['client_name']})" if not client_id else (s['full_name'] or 'Onbekend')
+        for s in stale[:8]
+    )
+    extra = f" en {len(stale) - 8} meer" if len(stale) > 8 else ""
+    st.warning(
+        f"⏰ **{len(stale)} lead(s)** staan al langer dan 24 uur op 'Review nodig' zonder opvolging: "
+        f"{names}{extra}. Geef ze voorrang!"
+    )
 
 # ── Statuskaarten (klikbaar als filter) ──────────────────────────────────────
 counts = cached_counts(client_id)
