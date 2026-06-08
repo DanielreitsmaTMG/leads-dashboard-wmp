@@ -205,6 +205,11 @@ with st.sidebar:
                     st.success(line)
             st.rerun()
 
+    if st.button("✨ Vacature maker", use_container_width=True,
+                 type="primary" if st.session_state.page == "vacature_maker" else "secondary"):
+        st.session_state.page = "vacature_maker"
+        st.rerun()
+
     if st.button("⚙️ Instellingen", use_container_width=True,
                  type="primary" if st.session_state.page == "settings" else "secondary"):
         st.session_state.page = "settings"
@@ -362,17 +367,22 @@ if st.session_state.page == "settings":
                 clear_cache()
                 st.rerun()
 
-    st.divider()
+    st.stop()
 
-    # ── AI-vacaturetekst-assistent ────────────────────────────────────────────
-    st.subheader("✨ AI-vacaturetekst-assistent")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Pagina: Vacature maker
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.page == "vacature_maker":
+    st.title("✨ Vacature maker")
     st.caption("Genereer een conceptvacaturetekst op basis van een korte briefing — handig als startpunt, controleer en pas aan voor publicatie.")
+
     with st.form("vacancy_text_form"):
         v_titel = st.text_input("Functietitel", placeholder="bijv. Onderhoudsschilder")
         v_punten = st.text_area(
             "Kernpunten (eisen, aanbod, bijzonderheden — los meegeven, AI verwerkt het tot lopende tekst)",
             placeholder="bijv. ervaring met buitenschilderwerk, rijbewijs B, fulltime, marktconform salaris, doorgroeimogelijkheden...",
-            height=100,
+            height=120,
         )
         v_toon = st.selectbox("Toon", ["professioneel en uitnodigend", "informeel en enthousiast", "zakelijk en to-the-point"])
         v_submit = st.form_submit_button("✨ Genereer concept", type="primary")
@@ -389,8 +399,10 @@ if st.session_state.page == "settings":
                 st.session_state["_vacancy_draft"] = tekst
 
     if st.session_state.get("_vacancy_draft"):
-        st.text_area("Conceptvacaturetekst (kopieer en pas aan waar nodig)",
-                     value=st.session_state["_vacancy_draft"], height=350, key="_vacancy_draft_view")
+        st.divider()
+        st.subheader("📄 Conceptvacaturetekst")
+        st.text_area("Kopieer en pas aan waar nodig",
+                     value=st.session_state["_vacancy_draft"], height=400, key="_vacancy_draft_view")
 
     st.stop()
 
