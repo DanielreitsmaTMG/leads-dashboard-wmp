@@ -65,3 +65,52 @@ python systems/app.py
 ## Rate limits
 
 Meta Graph API: 200 calls per uur per token. Bij 15-minuten interval is dit ruim voldoende.
+
+## AI-assistent functies (toegevoegd: stap 1 richting "Maxim"-vergelijking)
+
+Het dashboard heeft een AI-laag (`systems/ai_assistant.py`) die de Anthropic (Claude)
+API gebruikt. Geïnspireerd door een vergelijking met de tool meetmaxim.com/super-assistent —
+dit is een eerste, losstaande stap; een volledige geautomatiseerde intake-conversatie
+(zoals Maxim doet) is een veel groter traject en is bewust nog niet gebouwd.
+
+Functies:
+
+1. **AI-samenvatting per lead** — knop in de leaddetailpagina ("✨ Genereer samenvatting").
+   Stuurt de formulierantwoorden naar Claude (`claude-haiku-4-5`) en slaat een korte
+   profielomschrijving + matchinschatting op in `leads.ai_summary` / `ai_summary_at`.
+   Wordt NIET automatisch gegenereerd (kost API-credits) — alleen op aanvraag van de recruiter.
+
+2. **Follow-up signalering** — bovenaan het leadsoverzicht verschijnt een waarschuwing
+   zodra er leads zijn die langer dan 24 uur op status "Review nodig" staan
+   (`get_stale_leads()` in `database.py`, gecached 5 min via `cached_stale_leads`).
+
+3. **AI-vacaturetekst-assistent** — onderaan de instellingenpagina. Recruiter geeft
+   functietitel + losse kernpunten op, Claude genereert een conceptvacaturetekst
+   (intro / taken / eisen / aanbod / call-to-action). Puur een hulpmiddel — recruiter
+   controleert en past aan voor publicatie.
+
+### Benodigde secret
+
+`ANTHROPIC_API_KEY` — moet worden toegevoegd aan:
+- Lokale `.env` (voor CLI-gebruik)
+- Streamlit Cloud secrets (Manage app → Settings → Secrets)
+- Eventueel GitHub Actions secrets, als AI-verwerking ooit via de cron-sync gaat lopen
+  (nu gebeurt dit alleen interactief, dus dit is vooralsnog niet nodig)
+
+Zonder deze key tonen de AI-knoppen een duidelijke melding ("ANTHROPIC_API_KEY ontbreekt")
+in plaats van te crashen — zie `_client()` in `ai_assistant.py`.
+
+### Model & kosten
+
+Gebruikt `claude-haiku-4-5` (snel en goedkoop, geschikt voor korte samenvattingen/teksten).
+Per samenvatting/tekst kost dit een fractie van een cent. Bij hoog volume (honderden
+samenvattingen per dag) kan dit oplopen — overweeg dan caching/batchverwerking.
+
+### Mogelijke vervolgstappen (niet gebouwd, zie gesprek met gebruiker)
+
+- Geautomatiseerd eerste-contact via WhatsApp/SMS direct na binnenkomst van een lead
+- Automatische profielverrijking uit gesprekken (vergt punt hierboven)
+- Workflow-/talent-journey-engine met triggers en wachttijden
+- Database-reactivatie van koude leads
+- Let op AVG: geautomatiseerde verwerking van persoonsgegevens van sollicitanten
+  via AI vergt zorgvuldige juridische afweging (transparantie/toestemming/opslag)
