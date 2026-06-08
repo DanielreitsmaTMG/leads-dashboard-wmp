@@ -96,12 +96,13 @@ with st.sidebar:
 
     if st.button("🔄 Vernieuwen", use_container_width=True):
         with st.spinner("Leads ophalen..."):
-            try:
-                n = fetch_all_clients()
-                st.success(f"{n} nieuwe leads opgehaald")
-                st.rerun()
-            except Exception as e:
-                st.error(str(e))
+            n, log = fetch_all_clients()
+            for line in log:
+                if "⚠️" in line:
+                    st.warning(line)
+                else:
+                    st.success(line)
+            st.rerun()
 
     if st.button("⚙️ Instellingen", use_container_width=True,
                  type="primary" if st.session_state.page == "settings" else "secondary"):

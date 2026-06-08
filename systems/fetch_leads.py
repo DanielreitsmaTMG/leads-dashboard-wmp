@@ -26,46 +26,63 @@ def _token():
 def fetch_all_clients():
     token = _token()
     if not token:
-        print("[fetch_leads] META_ACCESS_TOKEN ontbreekt")
-        return 0
+        return 0, ["META_ACCESS_TOKEN ontbreekt"]
 
     clients = get_all_clients()
     if not clients:
-        print("[fetch_leads] Geen clients geconfigureerd")
-        return 0
+        return 0, ["Geen clients geconfigureerd"]
 
     total = 0
+    log = []
     for client in clients:
-        total += _fetch_client(client["id"], client["page_id"], token)
-    print(f"[fetch_leads] {total} nieuwe leads — {datetime.now().strftime('%H:%M:%S')}")
-    return total
+        count, errors = _fetch_client(client["id"], client["page_id"], client["name"], token)
+        total += count
+        log.append(f"**{client['name']}**: {count} leads opgehaald")
+        log.extend([f"  ⚠️ {e}" for e in errors])
+    return total, log
 
 
-def _fetch_client(client_id, page_id, token):
+def _fetch_client(client_id, page_id, client_name, token):
     url = f"{META_API_BASE}/{page_id}/leadgen_forms"
-    r = requests.get(url, params={"access_token": token, "fields": "id,name", "limit": 100}, timeout=30)
-    r.raise_for_status()
-    forms = r.json().get("data", [])
-    count = 0
-    for form in forms:
-        count += _fetch_form(form["id"], client_id, token)
-    return count
+    errors = []
+    try:
+        r = requests.get(url, params={"access_token": token, "fields": "id,name", "limit": 100}, timeout=30)
+        data = r.json()
+        if "error" in data:
+            return 0, [f"Formulieren ophalen mislukt: {data['error'].get('message', data['error'])}"]
+        forms = data.get("data", [])
+        if not forms:
+            return 0, [f"Geen leadformulieren gevonden op pagina {page_id}"]
+        count = 0
+        for form in forms:
+            c, e = _fetch_form(form["id"], form.get("name", form["id"]), client_id, token)
+            count += c
+            errors.extend(e)
+        return count, errors
+    except Exception as e:
+        return 0, [str(e)]
 
 
-def _fetch_form(form_id, client_id, token):
+def _fetch_form(form_id, form_name, client_id, token):
     url = f"{META_API_BASE}/{form_id}/leads"
     params = {"access_token": token, "fields": "id,created_time,field_data", "limit": 100}
     count = 0
-    while url:
-        r = requests.get(url, params=params, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-        for lead in data.get("data", []):
-            _process(lead, client_id)
-            count += 1
-        url = data.get("paging", {}).get("next")
-        params = {}
-    return count
+    errors = []
+    try:
+        while url:
+            r = requests.get(url, params=params, timeout=30)
+            data = r.json()
+            if "error" in data:
+                errors.append(f"Formulier '{form_name}': {data['error'].get('message', data['error'])}")
+                break
+            for lead in data.get("data", []):
+                _process(lead, client_id)
+                count += 1
+            url = data.get("paging", {}).get("next")
+            params = {}
+    except Exception as e:
+        errors.append(f"Formulier '{form_name}': {e}")
+    return count, errors
 
 
 def _process(raw, client_id):
