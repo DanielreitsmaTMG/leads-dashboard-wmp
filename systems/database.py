@@ -52,7 +52,13 @@ def _conn_params():
 
 @contextmanager
 def _conn():
-    con = psycopg.connect(**_conn_params(), row_factory=dict_row)
+    params = _conn_params()
+    # Bouw conninfo string handmatig zodat libpq de punt in de username niet afknipt
+    conninfo = (
+        f"host={params['host']} port={params['port']} dbname={params['dbname']} "
+        f"user='{params['user']}' password='{params['password']}' sslmode={params['sslmode']}"
+    )
+    con = psycopg.connect(conninfo, row_factory=dict_row)
     try:
         yield con
         con.commit()
