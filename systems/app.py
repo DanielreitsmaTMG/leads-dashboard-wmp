@@ -19,7 +19,18 @@ from fetch_leads import fetch_all_clients
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # ── Eenmalig: DB + scheduler ──────────────────────────────────────────────────
-init_db()
+try:
+    init_db()
+except Exception as e:
+    st.error(f"Database verbindingsfout: {e}")
+    url = ""
+    try:
+        url = st.secrets["DATABASE_URL"]
+        url = url[:30] + "..." + url[-20:]
+    except Exception:
+        url = "(niet gevonden)"
+    st.code(f"DATABASE_URL (deels): {url}")
+    st.stop()
 
 if "scheduler_started" not in st.session_state:
     scheduler = BackgroundScheduler()
