@@ -1,11 +1,10 @@
 import os
-import sys
 import json
 from datetime import datetime
 from contextlib import contextmanager
 
-import psycopg2
-import psycopg2.extras
+import psycopg
+from psycopg.rows import dict_row
 import streamlit as st
 
 STATUSES = [
@@ -28,7 +27,6 @@ STATUS_COLORS = {
 
 
 def _db_url():
-    """Leest de database-URL uit Streamlit secrets of omgevingsvariabelen."""
     try:
         return st.secrets["DATABASE_URL"]
     except Exception:
@@ -40,7 +38,7 @@ def _db_url():
 
 @contextmanager
 def _conn():
-    con = psycopg2.connect(_db_url(), cursor_factory=psycopg2.extras.RealDictCursor)
+    con = psycopg.connect(_db_url(), row_factory=dict_row)
     try:
         yield con
         con.commit()
@@ -50,16 +48,16 @@ def _conn():
 
 def init_db():
     with _conn() as con:
-        cur = con.cursor()
-        cur.execute("""
+        con.execute("""
             CREATE TABLE IF NOT EXISTS clients (
                 id         SERIAL PRIMARY KEY,
                 name       TEXT NOT NULL,
                 page_id    TEXT NOT NULL UNIQUE,
                 active     BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT NOW()
-            );
-
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS leads (
                 id                SERIAL PRIMARY KEY,
                 meta_lead_id      TEXT UNIQUE NOT NULL,
@@ -73,14 +71,15 @@ def init_db():
                 status_updated_at TIMESTAMP DEFAULT NOW(),
                 notes             TEXT DEFAULT '',
                 inserted_at       TIMESTAMP DEFAULT NOW()
-            );
-
+            )
+        """)
+        con.execute("""
             CREATE TABLE IF NOT EXISTS status_history (
                 id         SERIAL PRIMARY KEY,
                 lead_id    INTEGER NOT NULL REFERENCES leads(id),
                 status     TEXT NOT NULL,
                 changed_at TIMESTAMP DEFAULT NOW()
-            );
+            )
         """)
 
 
@@ -88,14 +87,12 @@ def init_db():
 
 def get_all_clients():
     with _conn() as con:
-        cur = con.cursor()
-        cur.execute("SELECT * FROM clients ORDER BY name")
-        return cur.fetchall()
+        return con.execute("SELECT * FROM clients ORDER BY name").fetchall()
 
 
 def add_client(name, page_id):
     with _conn() as con:
-        con.cursor().execute(
+        con.execute(
             "INSERT INTO clients (name, page_id) VALUES (%s, %s) ON CONFLICT (page_id) DO NOTHING",
             (name, page_id),
         )
@@ -103,19 +100,19 @@ def add_client(name, page_id):
 
 def delete_client(client_id):
     with _conn() as con:
-        con.cursor().execute("DELETE FROM clients WHERE id = %s", (client_id,))
+        con.execute("DELETE FROM clients WHERE id = %s", (client_id,))
 
 
 # ── Leads ─────────────────────────────────────────────────────────────────────
 
 def upsert_lead(data):
     with _conn() as con:
-        cur = con.cursor()
-        cur.execute("SELECT id FROM leads WHERE meta_lead_id = %s", (data["meta_lead_id"],))
-        if cur.fetchone():
+        existing = con.execute(
+            "SELECT id FROM leads WHERE meta_lead_id = %s", (data["meta_lead_id"],)
+        ).fetchone()
+        if existing:
             return
-
-        cur.execute(
+        row = con.execute(
             """INSERT INTO leads
                (meta_lead_id, client_id, created_time, full_name, email, phone,
                 form_data, status, status_updated_at)
@@ -130,22 +127,20 @@ def upsert_lead(data):
                 data["phone"],
                 json.dumps(data.get("form_data", {}), ensure_ascii=False),
             ),
-        )
-        lead_id = cur.fetchone()["id"]
-        cur.execute(
+        ).fetchone()
+        con.execute(
             "INSERT INTO status_history (lead_id, status) VALUES (%s, 'Review nodig')",
-            (lead_id,),
+            (row["id"],),
         )
 
 
 def update_status(lead_id, status):
     with _conn() as con:
-        cur = con.cursor()
-        cur.execute(
+        con.execute(
             "UPDATE leads SET status = %s, status_updated_at = NOW() WHERE id = %s",
             (status, lead_id),
         )
-        cur.execute(
+        con.execute(
             "INSERT INTO status_history (lead_id, status) VALUES (%s, %s)",
             (lead_id, status),
         )
@@ -153,9 +148,7 @@ def update_status(lead_id, status):
 
 def update_notes(lead_id, notes):
     with _conn() as con:
-        con.cursor().execute(
-            "UPDATE leads SET notes = %s WHERE id = %s", (notes, lead_id)
-        )
+        con.execute("UPDATE leads SET notes = %s WHERE id = %s", (notes, lead_id))
 
 
 def get_leads(client_id=None, status_filter=None, search=None):
@@ -178,40 +171,36 @@ def get_leads(client_id=None, status_filter=None, search=None):
         params.extend([s, s, s])
     query += " ORDER BY l.created_time DESC"
     with _conn() as con:
-        cur = con.cursor()
-        cur.execute(query, params)
-        return cur.fetchall()
+        return con.execute(query, params).fetchall()
 
 
 def get_status_counts(client_id=None):
     counts = {s: 0 for s in STATUSES}
     with _conn() as con:
-        cur = con.cursor()
         if client_id:
-            cur.execute(
+            rows = con.execute(
                 "SELECT status, COUNT(*) AS n FROM leads WHERE client_id = %s GROUP BY status",
                 (client_id,),
-            )
+            ).fetchall()
         else:
-            cur.execute("SELECT status, COUNT(*) AS n FROM leads GROUP BY status")
-        for row in cur.fetchall():
-            counts[row["status"]] = row["n"]
+            rows = con.execute(
+                "SELECT status, COUNT(*) AS n FROM leads GROUP BY status"
+            ).fetchall()
+    for row in rows:
+        counts[row["status"]] = row["n"]
     return counts
 
 
 def get_lead(lead_id):
     with _conn() as con:
-        cur = con.cursor()
-        cur.execute(
+        lead = con.execute(
             """SELECT l.*, c.name AS client_name
                FROM leads l LEFT JOIN clients c ON l.client_id = c.id
                WHERE l.id = %s""",
             (lead_id,),
-        )
-        lead = cur.fetchone()
-        cur.execute(
+        ).fetchone()
+        history = con.execute(
             "SELECT * FROM status_history WHERE lead_id = %s ORDER BY changed_at DESC",
             (lead_id,),
-        )
-        history = cur.fetchall()
+        ).fetchall()
     return lead, history
