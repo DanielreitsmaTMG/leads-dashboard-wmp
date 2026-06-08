@@ -42,11 +42,29 @@ def fetch_all_clients():
     return total, log
 
 
+def _get_page_token(page_id, user_token):
+    """Wissel user/system token in voor een page access token."""
+    r = requests.get(
+        f"{META_API_BASE}/{page_id}",
+        params={"fields": "access_token", "access_token": user_token},
+        timeout=15,
+    )
+    data = r.json()
+    if "access_token" in data:
+        return data["access_token"], None
+    return None, data.get("error", {}).get("message", "Onbekende fout bij ophalen page token")
+
+
 def _fetch_client(client_id, page_id, client_name, token):
-    url = f"{META_API_BASE}/{page_id}/leadgen_forms"
     errors = []
+    # Haal page access token op
+    page_token, err = _get_page_token(page_id, token)
+    if not page_token:
+        return 0, [f"Page token ophalen mislukt: {err}"]
+
+    url = f"{META_API_BASE}/{page_id}/leadgen_forms"
     try:
-        r = requests.get(url, params={"access_token": token, "fields": "id,name", "limit": 100}, timeout=30)
+        r = requests.get(url, params={"access_token": page_token, "fields": "id,name", "limit": 100}, timeout=30)
         data = r.json()
         if "error" in data:
             return 0, [f"Formulieren ophalen mislukt: {data['error'].get('message', data['error'])}"]
@@ -55,7 +73,7 @@ def _fetch_client(client_id, page_id, client_name, token):
             return 0, [f"Geen leadformulieren gevonden op pagina {page_id}"]
         count = 0
         for form in forms:
-            c, e = _fetch_form(form["id"], form.get("name", form["id"]), client_id, token)
+            c, e = _fetch_form(form["id"], form.get("name", form["id"]), client_id, page_token)
             count += c
             errors.extend(e)
         return count, errors
