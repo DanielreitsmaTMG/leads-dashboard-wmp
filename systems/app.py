@@ -180,18 +180,6 @@ with st.sidebar:
             st.session_state.page = "leads"
             st.rerun()
 
-        # Vacatures als sub-items onder actieve client
-        if is_active_client:
-            vacancies = cached_vacancies(c["id"])
-            for v in vacancies:
-                is_active_vac = st.session_state.active_vacancy == v
-                if st.button(f"  💼 {v}", use_container_width=True,
-                             type="primary" if is_active_vac else "secondary",
-                             key=f"vac_{c['id']}_{v}"):
-                    st.session_state.active_vacancy = v
-                    st.session_state.page = "leads"
-                    st.rerun()
-
     st.divider()
 
     if st.button("🔄 Vernieuwen", use_container_width=True):
