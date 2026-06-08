@@ -9,11 +9,12 @@ from database import get_all_clients, upsert_lead, upsert_form
 META_API_BASE = "https://graph.facebook.com/v21.0"
 
 # Trefwoorden — veld wordt herkend als het sleutelwoord ERGENS in de veldnaam zit
-NAME_KEYWORDS  = {"full_name", "fullname", "naam", "name"}
-FIRST_KEYWORDS = {"first_name", "firstname", "voornaam"}
-LAST_KEYWORDS  = {"last_name", "lastname", "achternaam"}
-EMAIL_KEYWORDS = {"email", "e_mail", "emailadres", "mail"}
-PHONE_KEYWORDS = {"phone", "telefoon", "telefoonnummer", "mobile", "mobiel", "gsm", "tel"}
+NAME_KEYWORDS    = {"full_name", "fullname", "naam", "name"}
+FIRST_KEYWORDS   = {"first_name", "firstname", "voornaam"}
+LAST_KEYWORDS    = {"last_name", "lastname", "achternaam"}
+EMAIL_KEYWORDS   = {"email", "e_mail", "emailadres", "mail"}
+PHONE_KEYWORDS   = {"phone", "telefoon", "telefoonnummer", "mobile", "mobiel", "gsm", "tel"}
+VACANCY_KEYWORDS = {"vacaturenaam", "vacancy", "vacature", "functie", "job_title", "jobtitle", "position"}
 
 
 def _token():
@@ -124,7 +125,7 @@ def _matches(key, keywords):
 
 def _process(raw, client_id, form_id):
     first, last = [], []
-    full = email = phone = None
+    full = email = phone = vacancy = None
     extra = {}
 
     for field in raw.get("field_data", []):
@@ -133,7 +134,9 @@ def _process(raw, client_id, form_id):
         if not val:
             continue
 
-        if _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
+        if _matches(key, VACANCY_KEYWORDS):
+            vacancy = val
+        elif _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
             full = val
         elif _matches(key, FIRST_KEYWORDS):
             first.append(val)
@@ -164,6 +167,7 @@ def _process(raw, client_id, form_id):
         "full_name":    full,
         "email":        email,
         "phone":        phone,
+        "vacancy_name": vacancy,
         "form_data":    extra,
     })
 

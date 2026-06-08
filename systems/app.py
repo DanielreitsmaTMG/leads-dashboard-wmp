@@ -13,6 +13,7 @@ from database import (
     get_leads, get_lead, get_status_counts,
     update_status, update_notes,
     get_forms_for_client, set_form_active,
+    get_vacancies_for_client,
     STATUSES, STATUS_COLORS,
 )
 from fetch_leads import fetch_all_clients
@@ -23,8 +24,12 @@ def cached_clients():
     return get_all_clients()
 
 @st.cache_data(ttl=60, show_spinner=False)
-def cached_leads(client_id, status_filter, search, days):
-    return get_leads(client_id=client_id, status_filter=status_filter, search=search, days=days)
+def cached_leads(client_id, status_filter, search, days, vacancy_name=None):
+    return get_leads(client_id=client_id, status_filter=status_filter, search=search, days=days, vacancy_name=vacancy_name)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_vacancies(client_id):
+    return get_vacancies_for_client(client_id) if client_id else []
 
 @st.cache_data(ttl=60, show_spinner=False)
 def cached_counts(client_id):
@@ -39,6 +44,7 @@ def clear_cache():
     cached_leads.clear()
     cached_counts.clear()
     cached_forms.clear()
+    cached_vacancies.clear()
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -64,9 +70,11 @@ if "scheduler_started" not in st.session_state:
 
 # ── Sessiestaat ───────────────────────────────────────────────────────────────
 if "page" not in st.session_state:
-    st.session_state.page = "leads"          # "leads" | "detail" | "settings"
+    st.session_state.page = "leads"
 if "active_client_id" not in st.session_state:
-    st.session_state.active_client_id = None  # None = alle clients
+    st.session_state.active_client_id = None
+if "active_vacancy" not in st.session_state:
+    st.session_state.active_vacancy = None
 if "selected_lead_id" not in st.session_state:
     st.session_state.selected_lead_id = None
 
@@ -104,17 +112,32 @@ with st.sidebar:
     if st.button("🌐 Alle clients", use_container_width=True,
                  type="primary" if st.session_state.active_client_id is None and st.session_state.page == "leads" else "secondary"):
         st.session_state.active_client_id = None
+        st.session_state.active_vacancy = None
         st.session_state.page = "leads"
         st.rerun()
 
     for c in clients:
-        is_active = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
+        is_active_client = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
+        is_active_no_vacancy = is_active_client and st.session_state.active_vacancy is None
         if st.button(f"👤 {c['name']}", use_container_width=True,
-                     type="primary" if is_active else "secondary",
+                     type="primary" if is_active_no_vacancy else "secondary",
                      key=f"client_{c['id']}"):
             st.session_state.active_client_id = c["id"]
+            st.session_state.active_vacancy = None
             st.session_state.page = "leads"
             st.rerun()
+
+        # Vacatures als sub-items onder actieve client
+        if is_active_client:
+            vacancies = cached_vacancies(c["id"])
+            for v in vacancies:
+                is_active_vac = st.session_state.active_vacancy == v
+                if st.button(f"  💼 {v}", use_container_width=True,
+                             type="primary" if is_active_vac else "secondary",
+                             key=f"vac_{c['id']}_{v}"):
+                    st.session_state.active_vacancy = v
+                    st.session_state.page = "leads"
+                    st.rerun()
 
     st.divider()
 
@@ -352,11 +375,16 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
 # ══════════════════════════════════════════════════════════════════════════════
 # Pagina: Leadsoverzicht
 # ══════════════════════════════════════════════════════════════════════════════
-client_id = st.session_state.active_client_id
-clients   = get_all_clients()
+client_id     = st.session_state.active_client_id
+active_vacancy = st.session_state.active_vacancy
+clients       = cached_clients()
 
 # Titel
-if client_id:
+if active_vacancy:
+    client_name = next((c["name"] for c in clients if c["id"] == client_id), "")
+    st.title(f"💼 {active_vacancy}")
+    st.caption(f"{client_name}")
+elif client_id:
     client_name = next((c["name"] for c in clients if c["id"] == client_id), "Onbekend")
     st.title(f"👤 {client_name}")
 else:
@@ -396,6 +424,7 @@ leads = cached_leads(
     status_filter=status_filter if status_filter != "Alle" else None,
     search=search or None,
     days=days,
+    vacancy_name=active_vacancy,
 )
 
 st.caption(f"{len(leads)} leads gevonden")

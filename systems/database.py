@@ -110,10 +110,9 @@ def init_db():
                 inserted_at       TIMESTAMP DEFAULT NOW()
             )
         """)
-        # Voeg form_id kolom toe als die nog niet bestaat (migratie)
-        con.execute("""
-            ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_id TEXT
-        """)
+        # Migraties
+        con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_id TEXT")
+        con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS vacancy_name TEXT")
         con.execute("""
             CREATE TABLE IF NOT EXISTS status_history (
                 id         SERIAL PRIMARY KEY,
@@ -188,23 +187,20 @@ def upsert_lead(data):
             (data["meta_lead_id"],)
         ).fetchone()
         if existing:
-            # Update ontbrekende naam/email/telefoon als die nu wel gevonden zijn
             updates, params = [], []
-            for field in ("full_name", "email", "phone"):
-                if not existing[field] and data.get(field):
+            for field in ("full_name", "email", "phone", "vacancy_name"):
+                if not existing.get(field) and data.get(field):
                     updates.append(f"{field} = %s")
                     params.append(data[field])
             if updates:
                 params.append(existing["id"])
-                con.execute(
-                    f"UPDATE leads SET {', '.join(updates)} WHERE id = %s", params
-                )
+                con.execute(f"UPDATE leads SET {', '.join(updates)} WHERE id = %s", params)
             return
         row = con.execute(
             """INSERT INTO leads
                (meta_lead_id, client_id, form_id, created_time, full_name, email, phone,
-                form_data, status, status_updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Review nodig', NOW())
+                form_data, vacancy_name, status, status_updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Review nodig', NOW())
                RETURNING id""",
             (
                 data["meta_lead_id"],
@@ -215,6 +211,7 @@ def upsert_lead(data):
                 data["email"],
                 data["phone"],
                 json.dumps(data.get("form_data", {}), ensure_ascii=False),
+                data.get("vacancy_name"),
             ),
         ).fetchone()
         con.execute(
@@ -240,7 +237,18 @@ def update_notes(lead_id, notes):
         con.execute("UPDATE leads SET notes = %s WHERE id = %s", (notes, lead_id))
 
 
-def get_leads(client_id=None, status_filter=None, search=None, days=7):
+def get_vacancies_for_client(client_id):
+    with _conn() as con:
+        rows = con.execute(
+            """SELECT DISTINCT vacancy_name FROM leads
+               WHERE client_id = %s AND vacancy_name IS NOT NULL AND vacancy_name != ''
+               ORDER BY vacancy_name""",
+            (client_id,),
+        ).fetchall()
+    return [r["vacancy_name"] for r in rows]
+
+
+def get_leads(client_id=None, status_filter=None, search=None, days=7, vacancy_name=None):
     query = """
         SELECT l.*, c.name AS client_name, f.form_name
         FROM leads l
@@ -260,6 +268,9 @@ def get_leads(client_id=None, status_filter=None, search=None, days=7):
     if status_filter:
         query += " AND l.status = %s"
         params.append(status_filter)
+    if vacancy_name:
+        query += " AND l.vacancy_name = %s"
+        params.append(vacancy_name)
     if search:
         query += " AND (l.full_name ILIKE %s OR l.email ILIKE %s OR l.phone ILIKE %s)"
         s = f"%{search}%"
