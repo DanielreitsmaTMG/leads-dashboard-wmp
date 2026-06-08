@@ -4,7 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
-from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary
+from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary, get_form
 from ai_assistant import summarize_lead
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
@@ -176,7 +176,9 @@ def _process(raw, client_id, client_name, form_id):
     # zodat deze al klaarstaat zodra de recruiter het dashboard opent.
     if is_new and extra:
         try:
-            summary = summarize_lead(full, vacancy, extra, client_name)
+            form_row = get_form(form_id)
+            vacancy_url = form_row.get("vacancy_url") if form_row else None
+            summary = summarize_lead(full, vacancy, extra, client_name, vacancy_url)
             if summary and not summary.startswith("⚠️"):
                 update_ai_summary(lead_id, summary)
         except Exception:

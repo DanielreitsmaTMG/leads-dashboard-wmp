@@ -115,6 +115,7 @@ def init_db():
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS vacancy_name TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary_at TIMESTAMP")
+        con.execute("ALTER TABLE forms ADD COLUMN IF NOT EXISTS vacancy_url TEXT")
         con.execute("""
             CREATE TABLE IF NOT EXISTS status_history (
                 id         SERIAL PRIMARY KEY,
@@ -167,6 +168,16 @@ def get_forms_for_client(client_id):
 def set_form_active(form_id, active):
     with _conn() as con:
         con.execute("UPDATE forms SET active = %s WHERE form_id = %s", (active, form_id))
+
+
+def set_form_vacancy_url(form_id, url):
+    with _conn() as con:
+        con.execute("UPDATE forms SET vacancy_url = %s WHERE form_id = %s", (url or None, form_id))
+
+
+def get_form(form_id):
+    with _conn() as con:
+        return con.execute("SELECT * FROM forms WHERE form_id = %s", (form_id,)).fetchone()
 
 
 def get_active_form_ids(client_id=None):
