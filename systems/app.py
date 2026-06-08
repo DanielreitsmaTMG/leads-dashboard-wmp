@@ -433,14 +433,14 @@ counts = cached_counts(client_id)
 total  = sum(counts.values())
 cols   = st.columns(len(STATUSES) + 1)
 
-if cols[0].button(f"**Totaal**\n\n### {total}", use_container_width=True, key="f_all"):
+if cols[0].button(f"Totaal\n{total}", use_container_width=True, key="f_all"):
     st.session_state.status_filter_override = None
     st.session_state.leads_page = 0
     st.rerun()
 
 for i, s in enumerate(STATUSES):
     emoji = BADGE_EMOJI.get(s, "")
-    if cols[i+1].button(f"{emoji} **{s}**\n\n### {counts[s]}", use_container_width=True, key=f"f_{s}"):
+    if cols[i+1].button(f"{emoji} {s}\n{counts[s]}", use_container_width=True, key=f"f_{s}"):
         st.session_state.status_filter_override = s
         st.session_state.leads_page = 0
         st.rerun()
