@@ -44,7 +44,7 @@ def _client():
     return anthropic.Anthropic(api_key=key)
 
 
-def summarize_lead(full_name, vacancy_name, form_data):
+def summarize_lead(full_name, vacancy_name, form_data, client_name=None):
     """
     Genereert een korte (2-3 zinnen) profielsamenvatting van een lead op
     basis van de ingevulde formulierantwoorden, plus een korte inschatting
@@ -63,11 +63,13 @@ def summarize_lead(full_name, vacancy_name, form_data):
 die via een Meta Ads leadformulier heeft gereageerd op een vacature.
 
 Naam: {full_name or "onbekend"}
+Klant (opdrachtgever waarbij gesolliciteerd is): {client_name or "onbekend"}
 Vacature: {vacancy_name or "onbekend"}
 Formulierantwoorden:
 {antwoorden}
 
 Schrijf een korte samenvatting (max 3 zinnen, in het Nederlands) voor de recruiter:
+- Vermeld bij welke klant/opdrachtgever deze persoon heeft gesolliciteerd.
 - Wie is deze persoon en wat is relevant uit de antwoorden?
 - Geef een korte inschatting van de match met de vacature (bijv. "lijkt goede match",
   "twijfelachtig vanwege...", "onvoldoende informatie om te beoordelen").

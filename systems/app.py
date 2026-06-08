@@ -424,7 +424,7 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
             btn_label = "✨ Genereer samenvatting"
         if st.button(btn_label, key="gen_summary"):
             with st.spinner("Bezig met analyseren..."):
-                summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data)
+                summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"])
             if summary is None:
                 st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de secrets om deze functie te gebruiken.")
             else:
@@ -653,7 +653,7 @@ else:
         elif form_data:
             if row[i].button("✨ Samenvatten", key=f"sum_{lead['id']}"):
                 with st.spinner("Bezig..."):
-                    summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data)
+                    summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"])
                 if summary is None:
                     st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de secrets.")
                 else:
