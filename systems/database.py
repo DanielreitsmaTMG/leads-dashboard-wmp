@@ -221,7 +221,7 @@ def update_notes(lead_id, notes):
         con.execute("UPDATE leads SET notes = %s WHERE id = %s", (notes, lead_id))
 
 
-def get_leads(client_id=None, status_filter=None, search=None):
+def get_leads(client_id=None, status_filter=None, search=None, days=7):
     query = """
         SELECT l.*, c.name AS client_name, f.form_name
         FROM leads l
@@ -230,6 +230,11 @@ def get_leads(client_id=None, status_filter=None, search=None):
         WHERE (l.form_id IS NULL OR f.active = TRUE OR f.form_id IS NULL)
     """
     params = []
+    if days is not None:
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        query += " AND l.created_time >= %s"
+        params.append(cutoff)
     if client_id:
         query += " AND l.client_id = %s"
         params.append(client_id)

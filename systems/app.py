@@ -344,14 +344,29 @@ for i, s in enumerate(STATUSES):
 st.divider()
 
 # Filters
-col_f1, col_f2 = st.columns([2, 3])
-status_filter = col_f1.selectbox("Filter op status", ["Alle"] + STATUSES, index=0)
-search        = col_f2.text_input("Zoeken", placeholder="Naam, e-mail of telefoon...")
+PERIODE_OPTIES = {
+    "Afgelopen 24 uur":  1,
+    "Afgelopen 48 uur":  2,
+    "Afgelopen 7 dagen": 7,
+    "Afgelopen 14 dagen": 14,
+    "Afgelopen 31 dagen": 31,
+    "Afgelopen 60 dagen": 60,
+    "Afgelopen 90 dagen": 90,
+    "Alle tijd": None,
+}
+
+col_f1, col_f2, col_f3 = st.columns([2, 2, 3])
+periode       = col_f1.selectbox("Periode", list(PERIODE_OPTIES.keys()), index=2)
+status_filter = col_f2.selectbox("Status", ["Alle"] + STATUSES, index=0)
+search        = col_f3.text_input("Zoeken", placeholder="Naam, e-mail of telefoon...")
+
+days = PERIODE_OPTIES[periode]
 
 leads = get_leads(
     client_id=client_id,
     status_filter=status_filter if status_filter != "Alle" else None,
     search=search or None,
+    days=days,
 )
 
 st.caption(f"{len(leads)} leads gevonden")
