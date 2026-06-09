@@ -116,6 +116,14 @@ def init_db():
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary_at TIMESTAMP")
         con.execute("ALTER TABLE forms ADD COLUMN IF NOT EXISTS vacancy_url TEXT")
+        # Reset foutief gematche vacancy_name waarden (ja/nee/vergelijkbare korte antwoorden
+        # die afkomstig zijn van vragen als "soortgelijke functie?") naar NULL zodat
+        # de volgende sync ze correct herdet via de striktere VACANCY_KEYWORDS matching.
+        con.execute("""
+            UPDATE leads SET vacancy_name = NULL, ai_summary = NULL, ai_summary_at = NULL
+            WHERE vacancy_name IS NOT NULL
+              AND lower(trim(vacancy_name)) = ANY(ARRAY['ja','nee','yes','no','true','false'])
+        """)
         con.execute("""
             CREATE TABLE IF NOT EXISTS status_history (
                 id         SERIAL PRIMARY KEY,

@@ -15,7 +15,12 @@ FIRST_KEYWORDS   = {"first_name", "firstname", "voornaam"}
 LAST_KEYWORDS    = {"last_name", "lastname", "achternaam"}
 EMAIL_KEYWORDS   = {"email", "e_mail", "emailadres", "mail"}
 PHONE_KEYWORDS   = {"phone", "telefoon", "telefoonnummer", "mobile", "mobiel", "gsm", "tel"}
-VACANCY_KEYWORDS = {"vacaturenaam", "vacancy", "vacature", "functie", "job_title", "jobtitle", "position"}
+
+# Vacature-keywords: bewust strenger — geen "functie" of "position" want die zitten
+# ook in vragen als "heb je ervaring in een soortgelijke functie?" (antwoord: ja/nee).
+# Matching verloopt via _matches_vacancy(): key moet STARTEN met of GELIJK zijn aan
+# het keyword, niet alleen ergens de substring bevatten.
+VACANCY_KEYWORDS = {"vacaturenaam", "vacancy_name", "vacancy", "vacature_naam", "job_title", "jobtitle"}
 
 
 def _token():
@@ -123,6 +128,11 @@ def _fetch_form(form_id, form_name, client_id, client_name, token):
 def _matches(key, keywords):
     return any(kw in key for kw in keywords)
 
+def _matches_vacancy(key, keywords):
+    """Striktere match voor vacature-velden: key moet exact gelijk zijn aan of
+    beginnen met het keyword, zodat 'soortgelijke_functie' e.d. NIET matchen."""
+    return any(key == kw or key.startswith(kw + "_") for kw in keywords)
+
 
 def _process(raw, client_id, client_name, form_id, form_name=None):
     first, last = [], []
@@ -135,7 +145,7 @@ def _process(raw, client_id, client_name, form_id, form_name=None):
         if not val:
             continue
 
-        if _matches(key, VACANCY_KEYWORDS):
+        if _matches_vacancy(key, VACANCY_KEYWORDS):
             vacancy = val
         elif _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
             full = val
