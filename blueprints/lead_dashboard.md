@@ -182,6 +182,47 @@ scheidingslijn voor de sidebar. Geen losse stylesheet-bestanden — alles zit in
 één CSS-blok bovenaan `app.py` zodat het makkelijk terug te vinden en aan te
 passen is.
 
+## UI/UX-pijplijn-styling (fasekleuren, stepper, tijdlijn)
+
+Naast de algemene Apple-achtige CSS is er een tweede ronde polish doorgevoerd
+gericht op de recruitment-pijplijn zelf:
+
+- **`STATUS_HEX`** (app.py) — hex-kleur per fase, gebruikt als visuele "bron
+  van waarheid" voor kleuraccenten door de hele UI (naast `BADGE_EMOJI`).
+- **Fasekaarten** (sectie 1 van het leadsoverzicht): tonen nu het AANTAL groot
+  bovenaan en de fasenaam klein eronder (label-formaat `"{count}\n{emoji} {s}"`),
+  met een gekleurde onderrand per fase (dikker bij de actieve/geselecteerde
+  fase). Werkt via een CSS "anchor + adjacent sibling"-trucje: een onzichtbare
+  `<div class="fase-anchor">` vlak vóór `st.columns(...)`, gevolgd door
+  `nth-child(N)`-regels gegenereerd uit `STATUSES`/`STATUS_HEX`.
+- **Dagsamenvatting**: onder de paginatitel staat nu `📅 X nieuwe lead(s)
+  vandaag · Y wachten in Instroom`.
+- **Kandidatentabel**: elke rij krijgt een gekleurde linkerrand o.b.v.
+  `lead["status"]` + subtiele hover-highlight, via hetzelfde
+  anchor+adjacent-sibling-trucje maar dan per lead-id (`row-anchor-{id}`).
+  Actie-knoppen (notitie/detail) in de rij zijn in dezelfde stylesheet
+  compacter en "ghost"-stijl gemaakt (geen rand/schaduw, alleen hover-highlight).
+- **Lege staten**: per fase een passende boodschap (bijv. "✅ Instroom is
+  leeg, mooi rustig!" / "🎉 Geen afgewezen leads").
+- **Detailpagina**: horizontale pijplijn-stepper bovenaan (cirkels met
+  vinkje/bullet per fase, verbonden door een lijn die de voortgang toont) en
+  de statusgeschiedenis is een verticale tijdlijn geworden (gekleurde stip +
+  verbindingslijn per gebeurtenis) i.p.v. een platte lijst.
+- **Sidebar**: klanten zonder `logo_url` tonen nu initialen in een gekleurde
+  cirkel (`.client-avatar`) i.p.v. een 👤-emoji, voor een consistentere look.
+  De onderste knoppen (Vernieuwen/Vacature maker/Instellingen) staan onder een
+  klein "TOOLS"-label.
+
+⚠️ **Let op bij toekomstige wijzigingen**: het anchor+adjacent-sibling
+CSS-trucje (`.fase-anchor + div[data-testid="stHorizontalBlock"]` en
+`.row-anchor-{id} + div[data-testid="stHorizontalBlock"]`) gaat ervan uit dat
+Streamlit een `st.markdown(...)`-element en het daaropvolgende
+`st.columns(...)`-blok als directe siblings in de DOM rendert. Dit klopt in
+de huidige Streamlit-versie maar is geen officieel gegarandeerde API — als een
+toekomstige Streamlit-update de DOM-structuur wijzigt, kunnen deze
+kleuraccenten wegvallen (de tabel/kaarten blijven dan wel gewoon functioneel,
+alleen zonder kleuraccent). Test dit na een Streamlit-versie-upgrade.
+
 ## Klantlogo's in de sidebar
 
 Elke klant in de sidebar toont het profielfoto-logo van de bijbehorende

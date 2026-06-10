@@ -126,6 +126,18 @@ BADGE_EMOJI = {
     "Afgewezen":           "⚫",
 }
 
+# Hex-kleuren per fase — gebruikt voor accentbalken/stippen in de UI, zodat de
+# pijplijn ook zonder emoji's in één oogopslag herkenbaar is.
+STATUS_HEX = {
+    "Instroom":            "#FFD60A",
+    "Nog geen contact":    "#FF9F0A",
+    "Gesproken":           "#0A84FF",
+    "Komt op gesprek":     "#BF5AF2",
+    "Voorstel gedaan":     "#A2845E",
+    "Geplaatst bij klant": "#30D158",
+    "Afgewezen":           "#8E8E93",
+}
+
 
 def fmt_dt(value):
     if not value:
@@ -236,8 +248,59 @@ hr {
     height: 28px;
     margin-top: 4px;
 }
+
+/* Klant-avatar (initialen) als fallback wanneer er geen logo bekend is */
+.client-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #8e8e93, #636366);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 4px;
+}
+
+/* Labels van inputs/selects iets rustiger en kleiner */
+[data-testid="stWidgetLabel"] p {
+    font-size: 0.8rem;
+    color: #6e6e73;
+    font-weight: 500;
+}
+
+/* ── Fasekaarten: groot getal, kleinere fase-naam, kleuraccent onderaan ────── */
+.fase-anchor + div[data-testid="stHorizontalBlock"] .stButton > button {
+    white-space: pre-line;
+    line-height: 1.35;
+    border-bottom-width: 4px;
+    border-bottom-style: solid;
+    padding-top: 0.8rem;
+    padding-bottom: 0.6rem;
+}
+.fase-anchor + div[data-testid="stHorizontalBlock"] .stButton > button p {
+    white-space: pre-line;
+}
+.fase-anchor + div[data-testid="stHorizontalBlock"] .stButton > button p::first-line {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+.fase-anchor + div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
+    border-bottom-width: 6px;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# Per-fase kleuraccent op de fasekaarten (onderrand). De volgorde komt overeen
+# met STATUSES, dus nth-child(N) == fase N in de rij.
+_fase_card_css = "\n".join(
+    f'.fase-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child({i+1}) .stButton > button {{ border-bottom-color: {STATUS_HEX.get(s, "#8E8E93")}; }}'
+    for i, s in enumerate(STATUSES)
+)
+st.markdown(f"<style>{_fase_card_css}</style>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("## ⚡ Leads Dashboard")
@@ -264,7 +327,8 @@ with st.sidebar:
                 unsafe_allow_html=True,
             )
         else:
-            col_logo.markdown("👤")
+            initials = "".join(w[0] for w in c["name"].split()[:2]).upper() or "?"
+            col_logo.markdown(f'<div class="client-avatar">{initials}</div>', unsafe_allow_html=True)
 
         if col_btn.button(c["name"], use_container_width=True,
                      type="primary" if is_active_no_vacancy else "secondary",
@@ -275,6 +339,11 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
+    st.markdown(
+        "<p style='font-size:0.75rem; color:#8e8e93; font-weight:600; "
+        "text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.4rem;'>Tools</p>",
+        unsafe_allow_html=True,
+    )
 
     if st.button("🔄 Vernieuwen", use_container_width=True):
         with st.spinner("Leads ophalen..."):
@@ -508,15 +577,50 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
 
     form_data = json.loads(lead["form_data"] or "{}")
 
+    st.markdown(f"## {lead['full_name'] or 'Onbekende naam'}")
+    if lead["client_name"]:
+        st.caption(f"Client: {lead['client_name']}")
+    if lead["vacancy_name"]:
+        st.caption(f"💼 Gesolliciteerd op: {lead['vacancy_name']}")
+
+    # ── Pijplijn-stepper: visueel overzicht van de huidige fase ─────────────────
+    _cur_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
+    _step_html = ['<div style="display:flex; align-items:flex-start; margin: 0.75rem 0 1.25rem 0;">']
+    for idx, s in enumerate(STATUSES):
+        color = STATUS_HEX.get(s, "#8E8E93")
+        if idx < _cur_idx:
+            dot_style = f"background:{color}; color:white;"
+            dot_content = "✓"
+        elif idx == _cur_idx:
+            dot_style = f"background:{color}; color:white; box-shadow: 0 0 0 4px {color}33;"
+            dot_content = "●"
+        else:
+            dot_style = "background:#E5E5EA; color:#8E8E93;"
+            dot_content = ""
+        line_color = color if idx < _cur_idx else "#E5E5EA"
+        _step_html.append('<div style="flex:1; text-align:center; position:relative;">')
+        if idx > 0:
+            _step_html.append(
+                f'<div style="position:absolute; top:11px; left:-50%; width:100%; height:2px; '
+                f'background:{line_color}; z-index:0;"></div>'
+            )
+        _step_html.append(
+            f'<div style="position:relative; z-index:1; width:24px; height:24px; border-radius:50%; '
+            f'{dot_style} display:flex; align-items:center; justify-content:center; '
+            f'font-size:0.7rem; font-weight:700; margin:0 auto;">{dot_content}</div>'
+        )
+        weight = "700" if idx == _cur_idx else "400"
+        _step_html.append(
+            f'<div style="font-size:0.7rem; margin-top:6px; font-weight:{weight}; '
+            f'color:{"#1d1d1f" if idx == _cur_idx else "#8e8e93"};">{s}</div>'
+        )
+        _step_html.append('</div>')
+    _step_html.append('</div>')
+    st.markdown("".join(_step_html), unsafe_allow_html=True)
+
     col_left, col_right = st.columns([3, 2], gap="large")
 
     with col_left:
-        st.markdown(f"## {lead['full_name'] or 'Onbekende naam'}")
-        if lead["client_name"]:
-            st.caption(f"Client: {lead['client_name']}")
-        if lead["vacancy_name"]:
-            st.caption(f"💼 Gesolliciteerd op: {lead['vacancy_name']}")
-
         st.markdown(f"**Status:** {BADGE_EMOJI.get(lead['status'], '')} {lead['status']}")
 
         with st.container(border=True):
@@ -560,7 +664,7 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
             st.rerun()
 
     with col_right:
-        st.subheader("🏷️ Status wijzigen")
+        st.subheader("🏷️ Fase wijzigen")
         for s in STATUSES:
             is_current = lead["status"] == s
             label = f"{BADGE_EMOJI.get(s, '')} {s}" + (" ✓" if is_current else "")
@@ -573,12 +677,29 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
 
         st.subheader("🕒 Geschiedenis")
         if history:
-            for h in history:
-                st.markdown(
-                    f"{BADGE_EMOJI.get(h['status'], '')} **{h['status']}**  \n"
-                    f"<small style='color:gray'>{fmt_dt(h['changed_at'])}</small>",
-                    unsafe_allow_html=True,
+            timeline_html = ['<div style="margin-top:0.25rem;">']
+            for idx, h in enumerate(history):
+                color = STATUS_HEX.get(h["status"], "#8E8E93")
+                is_last = idx == len(history) - 1
+                timeline_html.append(
+                    '<div style="display:flex; gap:10px; position:relative; padding-bottom:16px;">'
                 )
+                if not is_last:
+                    timeline_html.append(
+                        '<div style="position:absolute; left:5px; top:16px; bottom:0; '
+                        'width:2px; background:rgba(0,0,0,0.08);"></div>'
+                    )
+                timeline_html.append(
+                    f'<div style="width:12px; height:12px; min-width:12px; border-radius:50%; '
+                    f'background:{color}; margin-top:4px; z-index:1;"></div>'
+                )
+                timeline_html.append(
+                    f'<div><strong>{h["status"]}</strong><br>'
+                    f'<small style="color:gray">{fmt_dt(h["changed_at"])}</small></div>'
+                )
+                timeline_html.append('</div>')
+            timeline_html.append('</div>')
+            st.markdown("".join(timeline_html), unsafe_allow_html=True)
         else:
             st.caption("Geen geschiedenis beschikbaar.")
 
@@ -603,6 +724,12 @@ elif client_id:
 else:
     st.title("🌐 Alle clients")
 
+# ── Korte dagsamenvatting ─────────────────────────────────────────────────────
+counts = cached_counts(client_id)
+_recent_leads = cached_leads(client_id=client_id, status_filter=None, search=None, days=1, vacancy_name=active_vacancy)
+_n_today = sum(1 for l in _recent_leads if is_new(l["created_time"]))
+st.caption(f"📅 **{_n_today}** nieuwe lead(s) vandaag binnengekomen · **{counts.get('Instroom', 0)}** wachten in Instroom")
+
 # ── Follow-up signalering: leads die te lang wachten op opvolging ────────────
 # Tijdelijk uitgeschakeld op verzoek (te dominant nu de "Instroom"-fase elke dag
 # default is en standaard veel leads bevat). Logica blijft staan voor later.
@@ -621,12 +748,12 @@ if SHOW_STALE_BANNER:
         )
 
 # ── Sectie 1: fasekaarten (klikbaar als filter op de tabel hieronder) ────────
-counts = cached_counts(client_id)
-cols   = st.columns(len(STATUSES))
+st.markdown('<div class="fase-anchor"></div>', unsafe_allow_html=True)
+cols = st.columns(len(STATUSES))
 
 for i, s in enumerate(STATUSES):
     emoji = BADGE_EMOJI.get(s, "")
-    if cols[i].button(f"{emoji} {s}\n{counts[s]}", use_container_width=True, key=f"f_{s}",
+    if cols[i].button(f"{counts[s]}\n{emoji} {s}", use_container_width=True, key=f"f_{s}",
                       type="primary" if st.session_state.status_filter_override == s else "secondary"):
         st.session_state.status_filter_override = s
         st.session_state.leads_page = 0
@@ -734,16 +861,30 @@ leads       = all_leads[cur_page * PAGE_SIZE:(cur_page + 1) * PAGE_SIZE]
 
 pg_col1, pg_col2, pg_col3 = st.columns([1, 3, 1])
 pg_col2.caption(f"{total_leads} leads · pagina {cur_page + 1} van {total_pages}")
-if pg_col1.button("← Vorige", disabled=cur_page == 0):
+if pg_col1.button("‹", disabled=cur_page == 0, help="Vorige pagina"):
     st.session_state.leads_page = cur_page - 1
     st.rerun()
-if pg_col3.button("Volgende →", disabled=cur_page >= total_pages - 1):
+if pg_col3.button("›", disabled=cur_page >= total_pages - 1, help="Volgende pagina"):
     st.session_state.leads_page = cur_page + 1
     st.rerun()
 
 # ── Tabel ─────────────────────────────────────────────────────────────────────
 if not all_leads:
-    st.info("Geen leads gevonden in deze fase.")
+    _empty_messages = {
+        "Instroom":            "✅ Even niets nieuws — Instroom is leeg. Mooi rustig!",
+        "Nog geen contact":    "👍 Niemand wacht nog op een eerste contactmoment.",
+        "Gesproken":           "Geen leads in deze fase.",
+        "Komt op gesprek":     "Geen leads in deze fase.",
+        "Voorstel gedaan":     "Geen leads in deze fase.",
+        "Geplaatst bij klant": "Geen leads in deze fase.",
+        "Afgewezen":           "🎉 Geen afgewezen leads in deze selectie.",
+    }
+    _filter = st.session_state.status_filter_override
+    if _filter in _empty_messages:
+        st.success(_empty_messages[_filter]) if _filter in ("Instroom", "Afgewezen", "Nog geen contact") \
+            else st.info(_empty_messages[_filter])
+    else:
+        st.info("Geen leads gevonden voor deze selectie.")
 else:
     show_page_col = not client_id
     if show_page_col:
@@ -758,8 +899,38 @@ else:
         h_col.markdown(f"**{h_txt}**")
     st.divider()
 
+    # Per-rij stylesheet: kleuraccent (linkerrand) o.b.v. fase + compactere
+    # actieknoppen + subtiele hover, via "anchor + adjacent sibling" CSS-trucje.
+    _row_css = []
+    for lead in leads:
+        color = STATUS_HEX.get(lead["status"], "#8E8E93")
+        _row_css.append(f"""
+.row-anchor-{lead['id']} + div[data-testid="stHorizontalBlock"] {{
+    border-left: 4px solid {color};
+    padding: 0.35rem 0 0.35rem 0.6rem;
+    border-radius: 8px;
+    transition: background 0.15s ease-in-out;
+}}
+.row-anchor-{lead['id']} + div[data-testid="stHorizontalBlock"]:hover {{
+    background: rgba(0,0,0,0.025);
+}}
+.row-anchor-{lead['id']} + div[data-testid="stHorizontalBlock"] .stButton > button {{
+    padding: 0.2rem 0.5rem;
+    font-size: 0.85rem;
+    box-shadow: none;
+    border: none;
+    background: transparent;
+}}
+.row-anchor-{lead['id']} + div[data-testid="stHorizontalBlock"] .stButton > button:hover {{
+    background: rgba(0,0,0,0.05);
+    transform: none;
+}}
+""")
+    st.markdown(f"<style>{''.join(_row_css)}</style>", unsafe_allow_html=True)
+
     for lead in leads:
         new_badge = " 🆕" if is_new(lead["created_time"]) else ""
+        st.markdown(f'<div class="row-anchor-{lead["id"]}"></div>', unsafe_allow_html=True)
         row = st.columns(col_sizes)
         i = 0
 
