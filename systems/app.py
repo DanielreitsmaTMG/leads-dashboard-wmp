@@ -525,17 +525,21 @@ else:
     st.title("🌐 Alle clients")
 
 # ── Follow-up signalering: leads die te lang wachten op opvolging ────────────
-stale = cached_stale_leads(client_id, hours=24)
-if stale:
-    names = ", ".join(
-        f"{(s['full_name'] or 'Onbekend')} ({s['client_name']})" if not client_id else (s['full_name'] or 'Onbekend')
-        for s in stale[:8]
-    )
-    extra = f" en {len(stale) - 8} meer" if len(stale) > 8 else ""
-    st.warning(
-        f"⏰ **{len(stale)} lead(s)** staan al langer dan 24 uur op 'Instroom' zonder opvolging: "
-        f"{names}{extra}. Geef ze voorrang!"
-    )
+# Tijdelijk uitgeschakeld op verzoek (te dominant nu de "Instroom"-fase elke dag
+# default is en standaard veel leads bevat). Logica blijft staan voor later.
+SHOW_STALE_BANNER = False
+if SHOW_STALE_BANNER:
+    stale = cached_stale_leads(client_id, hours=24)
+    if stale:
+        names = ", ".join(
+            f"{(s['full_name'] or 'Onbekend')} ({s['client_name']})" if not client_id else (s['full_name'] or 'Onbekend')
+            for s in stale[:8]
+        )
+        extra = f" en {len(stale) - 8} meer" if len(stale) > 8 else ""
+        st.warning(
+            f"⏰ **{len(stale)} lead(s)** staan al langer dan 24 uur op 'Instroom' zonder opvolging: "
+            f"{names}{extra}. Geef ze voorrang!"
+        )
 
 # ── Sectie 1: fasekaarten (klikbaar als filter op de tabel hieronder) ────────
 counts = cached_counts(client_id)
