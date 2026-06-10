@@ -68,20 +68,46 @@ def _conn_params():
     }
 
 
-@contextmanager
-def _conn():
+def _conninfo():
     params = _conn_params()
     # Bouw conninfo string handmatig zodat libpq de punt in de username niet afknipt
-    conninfo = (
+    return (
         f"host={params['host']} port={params['port']} dbname={params['dbname']} "
         f"user='{params['user']}' password='{params['password']}' sslmode={params['sslmode']}"
     )
-    con = psycopg.connect(conninfo, row_factory=dict_row)
-    try:
+
+
+# ── Connection pool ──────────────────────────────────────────────────────────
+# BELANGRIJK (performance): Neon (serverless Postgres) heeft per nieuwe
+# connectie een merkbare opzet-vertraging (TLS-handshake + eventueel
+# "cold start" van het compute-endpoint). Eerder opende _conn() voor élke
+# query een gloednieuwe connectie — bij een paginalaad met meerdere queries
+# (clients, counts, leads, vacatures, ...) liep dit al snel op tot seconden
+# vertraging per pagina. Een hergebruikte connection pool (1 process-brede
+# pool, lazy aangemaakt) maakt losse queries vrijwel instant.
+_pool = None
+
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        from psycopg_pool import ConnectionPool
+        _pool = ConnectionPool(
+            _conninfo(),
+            min_size=1,
+            max_size=5,
+            kwargs={"row_factory": dict_row},
+            open=True,
+        )
+    return _pool
+
+
+@contextmanager
+def _conn():
+    pool = _get_pool()
+    with pool.connection() as con:
         yield con
         con.commit()
-    finally:
-        con.close()
 
 
 def init_db():
@@ -373,6 +399,24 @@ def get_leads(client_id=None, status_filter=None, search=None, days=7, vacancy_n
     query += " ORDER BY l.created_time DESC"
     with _conn() as con:
         return con.execute(query, params).fetchall()
+
+
+def get_leads_today_count(client_id=None, vacancy_name=None):
+    """Lichtgewicht COUNT-query voor de dagsamenvatting (i.p.v. alle leads van
+    vandaag op te halen en in Python te tellen)."""
+    from datetime import datetime, timezone
+    cutoff = datetime.now(timezone.utc).date().isoformat()
+    query = "SELECT COUNT(*) AS n FROM leads WHERE created_time >= %s"
+    params = [cutoff]
+    if client_id:
+        query += " AND client_id = %s"
+        params.append(client_id)
+    if vacancy_name:
+        query += " AND vacancy_name = %s"
+        params.append(vacancy_name)
+    with _conn() as con:
+        row = con.execute(query, params).fetchone()
+    return row["n"]
 
 
 def get_status_counts(client_id=None):

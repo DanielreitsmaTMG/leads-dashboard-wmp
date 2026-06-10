@@ -182,6 +182,42 @@ scheidingslijn voor de sidebar. Geen losse stylesheet-bestanden — alles zit in
 één CSS-blok bovenaan `app.py` zodat het makkelijk terug te vinden en aan te
 passen is.
 
+## Performance: database-laag (connection pool + init_db éénmalig)
+
+⚠️ **BELANGRIJKE LES (performance, 2e ronde)**: het dashboard werd weer traag
+door twee dingen op de database-laag:
+
+1. **`init_db()` liep bij ÉLKE rerun** (elke knopklik, statuswijziging,
+   pagina-navigatie veroorzaakt in Streamlit een volledige herrun van
+   `app.py`). `init_db()` bevat naast `CREATE TABLE`/`ALTER TABLE` ook
+   `UPDATE`-migraties die de hele `leads`- en `status_history`-tabel scannen
+   (vacancy_name-reset + `_STATUS_MIGRATION`-loop). Bij honderden/duizenden
+   leads is dat een zware query die bij elke interactie opnieuw werd
+   uitgevoerd. **Fix**: `init_db()` wordt nu aangeroepen via een functie
+   gewrapt in `@st.cache_resource`, zodat het maar ÉÉN keer per app-proces
+   draait (gedeeld over alle gebruikers/sessies), niet bij elke rerun.
+
+2. **Elke query opende een nieuwe databaseconnectie** (`_conn()` deed
+   `psycopg.connect(...)` per call). Neon (serverless Postgres) heeft
+   merkbare opzet-vertraging per nieuwe connectie (TLS-handshake +
+   eventuele "cold start" van het compute-endpoint) — bij een paginalaad met
+   meerdere queries (clients, counts, leads, vacatures, dagteller, ...) liep
+   dit op tot seconden per pagina. **Fix**: `database.py` gebruikt nu een
+   process-brede `psycopg_pool.ConnectionPool` (lazy aangemaakt,
+   `min_size=1, max_size=5`) — losse queries hergebruiken bestaande
+   connecties en zijn vrijwel instant. Vereist `psycopg-pool` in
+   `requirements.txt`.
+
+3. Daarnaast: de "dagsamenvatting" (nieuwe leads vandaag) deed eerst een
+   volledige `SELECT *`-query (`get_leads(days=1)`) en telde in Python.
+   Vervangen door een lichte `COUNT(*)`-query (`get_leads_today_count()`),
+   gecached via `cached_today_count`.
+
+**Algemene les**: in Streamlit draait bij elke interactie het hele script
+opnieuw — alles wat niet per-rerun hoeft (eenmalige setup, schema-migraties,
+dure aggregaties) hoort in `@st.cache_resource` (proces-breed, één keer) of
+`@st.cache_data` (per input, met TTL), nooit los op module-niveau.
+
 ## UI/UX-pijplijn-styling (fasekleuren, stepper, tijdlijn)
 
 Naast de algemene Apple-achtige CSS is er een tweede ronde polish doorgevoerd

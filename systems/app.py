@@ -10,7 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 sys.path.insert(0, os.path.dirname(__file__))
 from database import (
     init_db, get_all_clients, add_client, delete_client,
-    get_leads, get_lead, get_status_counts,
+    get_leads, get_lead, get_status_counts, get_leads_today_count,
     update_status, update_notes,
     get_forms_for_client, set_form_active, set_form_vacancy_url, get_form,
     get_vacancies_for_client,
@@ -37,6 +37,10 @@ def cached_vacancies(client_id):
 def cached_counts(client_id):
     return get_status_counts(client_id)
 
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_today_count(client_id, vacancy_name=None):
+    return get_leads_today_count(client_id, vacancy_name)
+
 @st.cache_data(ttl=120, show_spinner=False)
 def cached_forms(client_id):
     return get_forms_for_client(client_id)
@@ -56,6 +60,7 @@ def clear_cache():
     cached_clients.clear()
     cached_leads.clear()
     cached_counts.clear()
+    cached_today_count.clear()
     cached_forms.clear()
     cached_vacancies.clear()
     cached_stale_leads.clear()
@@ -64,8 +69,17 @@ def clear_cache():
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # ── Eenmalig: DB + scheduler ──────────────────────────────────────────────────
-try:
+# BELANGRIJK (performance): init_db() bevat o.a. UPDATE-migraties die de hele
+# leads/status_history-tabel scannen. st.cache_resource zorgt dat dit maar één
+# keer per app-proces draait (gedeeld over alle gebruikers/sessies), in plaats
+# van bij elke knopklik/rerun opnieuw — dat maakte de tool eerder erg traag.
+@st.cache_resource(show_spinner=False)
+def _init_db_once():
     init_db()
+    return True
+
+try:
+    _init_db_once()
 except Exception as e:
     st.error(f"Database verbindingsfout: {e}")
     url = ""
@@ -766,8 +780,7 @@ else:
 
 # ── Korte dagsamenvatting ─────────────────────────────────────────────────────
 counts = cached_counts(client_id)
-_recent_leads = cached_leads(client_id=client_id, status_filter=None, search=None, days=1, vacancy_name=active_vacancy)
-_n_today = sum(1 for l in _recent_leads if is_new(l["created_time"]))
+_n_today = cached_today_count(client_id, active_vacancy)
 st.caption(f"📅 **{_n_today}** nieuwe lead(s) vandaag binnengekomen · **{counts.get('Instroom', 0)}** wachten in Instroom")
 
 # ── Follow-up signalering: leads die te lang wachten op opvolging ────────────
