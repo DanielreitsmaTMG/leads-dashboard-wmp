@@ -286,22 +286,26 @@ hr {
     justify-content: center;
 }
 
-/* Klantrij (logo + naam) als één samenhangend, klikbaar geheel */
-.client-row + div[data-testid="stHorizontalBlock"] {
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.2rem 0.4rem;
+/* Klantrij (logo + naam) als één samenhangend, klikbaar geheel: gebruikt
+   st.container(border=True), zodat logo + knop binnen dezelfde "doos"
+   vallen i.p.v. los naast elkaar te staan. */
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
     border-radius: 10px;
-    margin-bottom: 1px;
-    transition: background 0.15s ease-in-out;
+    margin-bottom: 4px;
+    transition: background 0.15s ease-in-out, border-color 0.15s ease-in-out;
 }
-.client-row + div[data-testid="stHorizontalBlock"]:hover {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:hover {
     background: rgba(0,0,0,0.04);
 }
-.client-row-active + div[data-testid="stHorizontalBlock"] {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.active-row-marker) {
     background: rgba(10,132,255,0.1);
+    border-color: rgba(10,132,255,0.35);
 }
-.client-row + div[data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    gap: 0.6rem;
+}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stColumn"]:first-child {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -309,10 +313,10 @@ hr {
     width: 32px;
     min-width: 32px;
 }
-.client-row + div[data-testid="stHorizontalBlock"] [data-testid="stColumn"]:nth-child(2) {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stColumn"]:nth-child(2) {
     overflow: hidden;
 }
-.client-row + div[data-testid="stHorizontalBlock"] .stButton > button {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     border: none;
     box-shadow: none;
     background: transparent;
@@ -327,19 +331,25 @@ hr {
     text-overflow: ellipsis;
     display: block;
 }
-.client-row + div[data-testid="stHorizontalBlock"] .stButton > button p {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .stButton > button p {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.client-row + div[data-testid="stHorizontalBlock"] .stButton > button:hover {
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .stButton > button:hover {
     background: transparent;
     transform: none;
     box-shadow: none;
     text-decoration: underline;
 }
-.client-row + div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
-    color: #0A84FF;
+
+/* "Alle klanten"-knop: volle breedte, geen apart icoon. Actieve primaire
+   sidebarknoppen krijgen een subtiele blauwe pil i.p.v. het felrode thema. */
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: rgba(10,132,255,0.12) !important;
+    color: #0A84FF !important;
+    border: none !important;
+    box-shadow: none !important;
     font-weight: 700;
 }
 
@@ -389,11 +399,7 @@ with st.sidebar:
     clients = cached_clients()
 
     _all_active = st.session_state.active_client_id is None and st.session_state.page == "leads"
-    row_class = "client-row client-row-active" if _all_active else "client-row"
-    st.markdown(f'<div class="{row_class}"></div>', unsafe_allow_html=True)
-    col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
-    col_logo.markdown('<div class="client-avatar">🌐</div>', unsafe_allow_html=True)
-    if col_btn.button("Alle clients", use_container_width=True,
+    if st.button("Alle klanten", use_container_width=True,
                  type="primary" if _all_active else "secondary",
                  key="client_all"):
         st.session_state.active_client_id = None
@@ -405,25 +411,25 @@ with st.sidebar:
         is_active_client = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
         is_active_no_vacancy = is_active_client and st.session_state.active_vacancy is None
 
-        row_class = "client-row client-row-active" if is_active_no_vacancy else "client-row"
-        st.markdown(f'<div class="{row_class}"></div>', unsafe_allow_html=True)
-        col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
-        if c.get("logo_url"):
-            col_logo.markdown(
-                f'<img src="{c["logo_url"]}" class="client-logo">',
-                unsafe_allow_html=True,
-            )
-        else:
-            initials = "".join(w[0] for w in c["name"].split()[:2]).upper() or "?"
-            col_logo.markdown(f'<div class="client-avatar">{initials}</div>', unsafe_allow_html=True)
+        marker = '<span class="active-row-marker"></span>' if is_active_no_vacancy else ""
+        with st.container(border=True):
+            col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
+            if c.get("logo_url"):
+                col_logo.markdown(
+                    f'<img src="{c["logo_url"]}" class="client-logo">{marker}',
+                    unsafe_allow_html=True,
+                )
+            else:
+                initials = "".join(w[0] for w in c["name"].split()[:2]).upper() or "?"
+                col_logo.markdown(f'<div class="client-avatar">{initials}</div>{marker}', unsafe_allow_html=True)
 
-        if col_btn.button(c["name"], use_container_width=True,
-                     type="primary" if is_active_no_vacancy else "secondary",
-                     key=f"client_{c['id']}"):
-            st.session_state.active_client_id = c["id"]
-            st.session_state.active_vacancy = None
-            st.session_state.page = "leads"
-            st.rerun()
+            if col_btn.button(c["name"], use_container_width=True,
+                         type="primary" if is_active_no_vacancy else "secondary",
+                         key=f"client_{c['id']}"):
+                st.session_state.active_client_id = c["id"]
+                st.session_state.active_vacancy = None
+                st.session_state.page = "leads"
+                st.rerun()
 
     st.divider()
     st.markdown(
