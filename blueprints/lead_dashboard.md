@@ -117,6 +117,27 @@ Gebruikt `claude-haiku-4-5` (snel en goedkoop, geschikt voor korte samenvattinge
 Per samenvatting/tekst kost dit een fractie van een cent. Bij hoog volume (honderden
 samenvattingen per dag) kan dit oplopen — overweeg dan caching/batchverwerking.
 
+## Kanban-weergave (leadsoverzicht)
+
+Het leadsoverzicht heeft twee weergaven, te kiezen via de toggle bovenaan
+("🗂️ Kanban" / "📋 Tabel"), opgeslagen in `st.session_state.view_mode`.
+
+- **Kanban (standaard)**: één kolom per status uit `STATUSES`. Elke lead is een
+  kaart met naam, vacature, klant (in het totaaloverzicht), datum, contactlinks,
+  een inklapbare AI-samenvatting, een statusdropdown en knoppen voor notitie/details.
+  Het wijzigen van de statusdropdown op een kaart roept `update_status()` aan en
+  verplaatst de lead direct naar de bijbehorende kolom (`clear_cache()` + `st.rerun()`).
+  Per kolom worden max. 30 kaarten getoond (`MAX_PER_COLUMN`); bij meer leads wordt
+  geadviseerd de filters te verfijnen (periode/zoeken/sortering werken in beide
+  weergaven hetzelfde).
+- **Tabel**: de oorspronkelijke rij-per-lead weergave met paginering, klikbare
+  statuskaarten als filter en bulkacties — ongewijzigd, voor wie liever een
+  compact overzicht met meer leads tegelijk wil.
+
+Gedeelde logica (AI-samenvatting tonen/genereren, notitie-editor) zit in de
+hulpfuncties `render_summary()` en `render_notes_editor()` in `app.py`, zodat
+beide weergaven consistent blijven.
+
 ### Mogelijke vervolgstappen (niet gebouwd, zie gesprek met gebruiker)
 
 - Geautomatiseerd eerste-contact via WhatsApp/SMS direct na binnenkomst van een lead
