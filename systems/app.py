@@ -254,6 +254,14 @@ hr {
     opacity: 0.15;
 }
 
+/* Contact-iconen (e-mail/telefoon) in de leadstabel: klein en uitgelijnd */
+.contact-icon {
+    font-size: 0.8rem;
+    vertical-align: middle;
+    display: inline-block;
+    width: 1.1em;
+}
+
 /* Klant-logo in de sidebar */
 .client-logo {
     border-radius: 8px;
@@ -1011,13 +1019,24 @@ else:
             row[i].markdown(f"💼 {vacature_label}")
         i += 1
 
-        # Contact: e-mail + telefoon samengevoegd in één compacte kolom
+        # Contact: e-mail + telefoon samengevoegd in één compacte kolom.
+        # unsafe_allow_html zodat de iconen als kleine, uitgelijnde <span>
+        # getoond worden i.p.v. als oversized emoji-glyphs.
         contact_lines = []
         if lead["email"]:
-            contact_lines.append(f"✉️ [{lead['email']}](mailto:{lead['email']})")
+            contact_lines.append(
+                f'<span class="contact-icon">✉️</span> '
+                f'<a href="mailto:{lead["email"]}">{lead["email"]}</a>'
+            )
         if lead["phone"]:
-            contact_lines.append(f"📞 [{lead['phone']}](tel:{lead['phone']})")
-        row[i].markdown("  \n".join(contact_lines) if contact_lines else "—")
+            contact_lines.append(
+                f'<span class="contact-icon">📞</span> '
+                f'<a href="tel:{lead["phone"]}">{lead["phone"]}</a>'
+            )
+        row[i].markdown(
+            "<br>".join(contact_lines) if contact_lines else "—",
+            unsafe_allow_html=True,
+        )
         i += 1
 
         # AI-samenvatting i.p.v. ruwe formulierantwoorden — direct tonen, automatisch genereren indien nodig
