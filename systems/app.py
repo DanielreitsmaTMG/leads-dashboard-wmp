@@ -942,8 +942,10 @@ if not all_leads:
     }
     _filter = st.session_state.status_filter_override
     if _filter in _empty_messages:
-        st.success(_empty_messages[_filter]) if _filter in ("Instroom", "Afgewezen", "Nog geen contact") \
-            else st.info(_empty_messages[_filter])
+        if _filter in ("Instroom", "Afgewezen", "Nog geen contact"):
+            st.success(_empty_messages[_filter])
+        else:
+            st.info(_empty_messages[_filter])
     else:
         st.info("Geen leads gevonden voor deze selectie.")
 else:
