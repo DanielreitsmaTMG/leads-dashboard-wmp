@@ -941,11 +941,11 @@ if not all_leads:
 else:
     show_page_col = not client_id
     if show_page_col:
-        col_sizes = [0.4, 1.3, 1.7, 2.5, 1.8, 0.6, 3, 2, 0.5, 0.5]
-        headers   = ["", "Tijd", "Naam", "Gesolliciteerd op", "E-mail", "Bel", "Samenvatting", "Status", "", ""]
+        col_sizes = [0.4, 1.3, 1.7, 2.6, 1.6, 3.4, 2, 0.5, 0.5]
+        headers   = ["", "Tijd", "Naam", "Gesolliciteerd op", "Contact", "Samenvatting", "Status", "", ""]
     else:
-        col_sizes = [0.4, 1.3, 1.7, 2, 1.8, 0.6, 3, 2, 0.5, 0.5]
-        headers   = ["", "Tijd", "Naam", "Gesolliciteerd op", "E-mail", "Bel", "Samenvatting", "Status", "", ""]
+        col_sizes = [0.4, 1.3, 1.7, 2.1, 1.6, 3.4, 2, 0.5, 0.5]
+        headers   = ["", "Tijd", "Naam", "Gesolliciteerd op", "Contact", "Samenvatting", "Status", "", ""]
 
     hdr = st.columns(col_sizes)
     for h_col, h_txt in zip(hdr, headers):
@@ -1011,18 +1011,13 @@ else:
             row[i].markdown(f"💼 {vacature_label}")
         i += 1
 
-        # E-mail (klikbaar)
+        # Contact: e-mail + telefoon samengevoegd in één compacte kolom
+        contact_lines = []
         if lead["email"]:
-            row[i].markdown(f"[{lead['email']}](mailto:{lead['email']})")
-        else:
-            row[i].markdown("—")
-        i += 1
-
-        # Bellen (icoon)
+            contact_lines.append(f"✉️ [{lead['email']}](mailto:{lead['email']})")
         if lead["phone"]:
-            row[i].markdown(f"[📞](tel:{lead['phone']})")
-        else:
-            row[i].markdown("—")
+            contact_lines.append(f"📞 [{lead['phone']}](tel:{lead['phone']})")
+        row[i].markdown("  \n".join(contact_lines) if contact_lines else "—")
         i += 1
 
         # AI-samenvatting i.p.v. ruwe formulierantwoorden — direct tonen, automatisch genereren indien nodig

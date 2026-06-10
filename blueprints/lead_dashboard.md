@@ -162,7 +162,8 @@ Het leadsoverzicht bestaat uit twee secties die los van elkaar werken:
 2. **Kandidatentabel** (onder): één horizontale rij per lead, gefilterd op de
    gekozen fase + de overige filters (periode/zoeken/sorteren/paginering).
    Kolommen: tijd geleden, naam, "Gesolliciteerd op" (vacature/leadformulier +
-   pagina/klant), e-mail, bel-icoon, AI-samenvatting, fase-dropdown,
+   pagina/klant), Contact (e-mail + telefoon samengevoegd in één kolom, elk
+   met eigen klikbare link/icoon), AI-samenvatting, fase-dropdown,
    notitie-icoon, detail-icoon (→ volledige kandidaatkaart).
    De fase-dropdown roept `update_status()` aan — wijzigen verplaatst de lead
    direct naar een andere fase (en dus uit de huidige gefilterde weergave als
