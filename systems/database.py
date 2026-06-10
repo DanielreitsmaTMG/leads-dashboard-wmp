@@ -14,6 +14,7 @@ except Exception:
 
 STATUSES = [
     "Instroom",
+    "Nog geen contact",
     "Gesproken",
     "Komt op gesprek",
     "Voorstel gedaan",
@@ -23,6 +24,7 @@ STATUSES = [
 
 STATUS_COLORS = {
     "Instroom":            "warning",
+    "Nog geen contact":    "orange",
     "Gesproken":           "info",
     "Komt op gesprek":     "primary",
     "Voorstel gedaan":     "violet",

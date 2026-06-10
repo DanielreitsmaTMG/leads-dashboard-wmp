@@ -107,14 +107,21 @@ if "status_filter_override" not in st.session_state:
 if "open_notes_for" not in st.session_state:
     st.session_state.open_notes_for = None
 
+# Elke dag opnieuw standaard starten in de "Instroom"-fase
+_today = datetime.now().date().isoformat()
+if st.session_state.get("_filter_reset_date") != _today:
+    st.session_state.status_filter_override = "Instroom"
+    st.session_state._filter_reset_date = _today
+
 PAGE_SIZE = 25
 
 # ── Kleurmapping → Streamlit badge-kleuren ────────────────────────────────────
 BADGE_EMOJI = {
     "Instroom":            "🟡",
+    "Nog geen contact":    "🟠",
     "Gesproken":           "🔵",
     "Komt op gesprek":     "🟣",
-    "Voorstel gedaan":     "🟠",
+    "Voorstel gedaan":     "🟤",
     "Geplaatst bij klant": "🟢",
     "Afgewezen":           "⚫",
 }
@@ -532,19 +539,12 @@ if stale:
 
 # ── Sectie 1: fasekaarten (klikbaar als filter op de tabel hieronder) ────────
 counts = cached_counts(client_id)
-total  = sum(counts.values())
-cols   = st.columns(len(STATUSES) + 1)
-
-if cols[0].button(f"Totaal\n{total}", use_container_width=True, key="f_all",
-                  type="primary" if not st.session_state.status_filter_override else "secondary"):
-    st.session_state.status_filter_override = None
-    st.session_state.leads_page = 0
-    st.rerun()
+cols   = st.columns(len(STATUSES))
 
 for i, s in enumerate(STATUSES):
     emoji = BADGE_EMOJI.get(s, "")
-    if cols[i+1].button(f"{emoji} {s}\n{counts[s]}", use_container_width=True, key=f"f_{s}",
-                        type="primary" if st.session_state.status_filter_override == s else "secondary"):
+    if cols[i].button(f"{emoji} {s}\n{counts[s]}", use_container_width=True, key=f"f_{s}",
+                      type="primary" if st.session_state.status_filter_override == s else "secondary"):
         st.session_state.status_filter_override = s
         st.session_state.leads_page = 0
         st.rerun()

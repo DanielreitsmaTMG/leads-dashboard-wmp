@@ -46,11 +46,15 @@ bewust herkenbaar gehouden voor toekomstige automations per fase.
 | Status / fase | Kleur | Emoji |
 |--------|-------|-------|
 | Instroom | geel | 🟡 |
+| Nog geen contact | oranje | 🟠 |
 | Gesproken | blauw | 🔵 |
 | Komt op gesprek | paars | 🟣 |
-| Voorstel gedaan | oranje | 🟠 |
+| Voorstel gedaan | bruin | 🟤 |
 | Geplaatst bij klant | groen | 🟢 |
 | Afgewezen | grijs | ⚫ |
+
+"Nog geen contact" zit tussen "Instroom" en "Gesproken": leads die al wel
+bekeken zijn maar waarmee nog geen contact is gelegd.
 
 **Migratiehistorie**: dit project gebruikte eerder de namen "Review nodig",
 "Contact mislukt" en "Gaat op gesprek". Bij het opstarten van de app (init_db())
@@ -140,26 +144,33 @@ Gebruikt `claude-haiku-4-5` (snel en goedkoop, geschikt voor korte samenvattinge
 Per samenvatting/tekst kost dit een fractie van een cent. Bij hoog volume (honderden
 samenvattingen per dag) kan dit oplopen — overweeg dan caching/batchverwerking.
 
-## Kanban-weergave (leadsoverzicht)
+## Leadsoverzicht: twee secties
 
-Het leadsoverzicht heeft twee weergaven, te kiezen via de toggle bovenaan
-("🗂️ Kanban" / "📋 Tabel"), opgeslagen in `st.session_state.view_mode`.
+Het leadsoverzicht bestaat uit twee secties die los van elkaar werken:
 
-- **Kanban (standaard)**: één kolom per status uit `STATUSES`. Elke lead is een
-  kaart met naam, vacature, klant (in het totaaloverzicht), datum, contactlinks,
-  een inklapbare AI-samenvatting, een statusdropdown en knoppen voor notitie/details.
-  Het wijzigen van de statusdropdown op een kaart roept `update_status()` aan en
-  verplaatst de lead direct naar de bijbehorende kolom (`clear_cache()` + `st.rerun()`).
-  Per kolom worden max. 30 kaarten getoond (`MAX_PER_COLUMN`); bij meer leads wordt
-  geadviseerd de filters te verfijnen (periode/zoeken/sortering werken in beide
-  weergaven hetzelfde).
-- **Tabel**: de oorspronkelijke rij-per-lead weergave met paginering, klikbare
-  statuskaarten als filter en bulkacties — ongewijzigd, voor wie liever een
-  compact overzicht met meer leads tegelijk wil.
+1. **Fasekaarten** (boven): één klikbare kaart per fase uit `STATUSES`, met het
+   aantal leads in die fase. Klikken filtert de tabel hieronder
+   (`st.session_state.status_filter_override`) en markeert de actieve kaart
+   (`type="primary"`). Er is GEEN "Totaal"-kaart meer (bewust verwijderd).
 
-Gedeelde logica (AI-samenvatting tonen/genereren, notitie-editor) zit in de
-hulpfuncties `render_summary()` en `render_notes_editor()` in `app.py`, zodat
-beide weergaven consistent blijven.
+   **Standaardgedrag per dag**: bij elke nieuwe kalenderdag (vergeleken via
+   `st.session_state._filter_reset_date`) wordt de filter automatisch
+   teruggezet naar de fase **"Instroom"** — zodat de recruiter elke dag
+   begint met de nieuwste binnengekomen leads. Binnen dezelfde dag blijft een
+   handmatig gekozen fase/​"Alle" gewoon staan.
+
+2. **Kandidatentabel** (onder): één horizontale rij per lead, gefilterd op de
+   gekozen fase + de overige filters (periode/zoeken/sorteren/paginering).
+   Kolommen: tijd geleden, naam, "Gesolliciteerd op" (vacature/leadformulier +
+   pagina/klant), e-mail, bel-icoon, AI-samenvatting, fase-dropdown,
+   notitie-icoon, detail-icoon (→ volledige kandidaatkaart).
+   De fase-dropdown roept `update_status()` aan — wijzigen verplaatst de lead
+   direct naar een andere fase (en dus uit de huidige gefilterde weergave als
+   die op een specifieke fase staat).
+
+Gedeelde logica zit in de hulpfuncties `render_summary()` (toont alleen
+bestaande `ai_summary`, genereert NIET live — zie performance-sectie) en
+`render_notes_editor()` in `app.py`.
 
 ### Mogelijke vervolgstappen (niet gebouwd, zie gesprek met gebruiker)
 
