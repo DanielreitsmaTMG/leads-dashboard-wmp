@@ -522,36 +522,24 @@ if stale:
         f"{names}{extra}. Geef ze voorrang!"
     )
 
-# ── Weergave-keuze ────────────────────────────────────────────────────────────
-view_mode = st.radio(
-    "Weergave", ["🗂️ Kanban", "📋 Tabel"], horizontal=True,
-    key="view_mode", label_visibility="collapsed",
-)
-
-# ── Statuskaarten ─────────────────────────────────────────────────────────────
+# ── Sectie 1: fasekaarten (klikbaar als filter op de tabel hieronder) ────────
 counts = cached_counts(client_id)
 total  = sum(counts.values())
 cols   = st.columns(len(STATUSES) + 1)
 
-if view_mode == "📋 Tabel":
-    # Klikbaar als filter
-    if cols[0].button(f"Totaal\n{total}", use_container_width=True, key="f_all"):
-        st.session_state.status_filter_override = None
+if cols[0].button(f"Totaal\n{total}", use_container_width=True, key="f_all",
+                  type="primary" if not st.session_state.status_filter_override else "secondary"):
+    st.session_state.status_filter_override = None
+    st.session_state.leads_page = 0
+    st.rerun()
+
+for i, s in enumerate(STATUSES):
+    emoji = BADGE_EMOJI.get(s, "")
+    if cols[i+1].button(f"{emoji} {s}\n{counts[s]}", use_container_width=True, key=f"f_{s}",
+                        type="primary" if st.session_state.status_filter_override == s else "secondary"):
+        st.session_state.status_filter_override = s
         st.session_state.leads_page = 0
         st.rerun()
-
-    for i, s in enumerate(STATUSES):
-        emoji = BADGE_EMOJI.get(s, "")
-        if cols[i+1].button(f"{emoji} {s}\n{counts[s]}", use_container_width=True, key=f"f_{s}"):
-            st.session_state.status_filter_override = s
-            st.session_state.leads_page = 0
-            st.rerun()
-else:
-    # Kanban toont alle statussen al als kolommen — hier alleen totaaloverzicht
-    cols[0].metric("Totaal", total)
-    for i, s in enumerate(STATUSES):
-        emoji = BADGE_EMOJI.get(s, "")
-        cols[i+1].metric(f"{emoji} {s}", counts[s])
 
 st.divider()
 
@@ -663,213 +651,131 @@ def render_notes_editor(lead):
             st.rerun()
 
 
-if view_mode == "📋 Tabel":
-    # ── Paginering ────────────────────────────────────────────────────────────
-    total_leads = len(all_leads)
-    total_pages = max(1, (total_leads + PAGE_SIZE - 1) // PAGE_SIZE)
-    cur_page    = min(st.session_state.leads_page, total_pages - 1)
-    leads       = all_leads[cur_page * PAGE_SIZE:(cur_page + 1) * PAGE_SIZE]
+# ── Sectie 2: kandidatentabel (gefilterd door de fasekaart hierboven) ───────
+# ── Paginering ────────────────────────────────────────────────────────────────
+total_leads = len(all_leads)
+total_pages = max(1, (total_leads + PAGE_SIZE - 1) // PAGE_SIZE)
+cur_page    = min(st.session_state.leads_page, total_pages - 1)
+leads       = all_leads[cur_page * PAGE_SIZE:(cur_page + 1) * PAGE_SIZE]
 
-    pg_col1, pg_col2, pg_col3 = st.columns([1, 3, 1])
-    pg_col2.caption(f"{total_leads} leads · pagina {cur_page + 1} van {total_pages}")
-    if pg_col1.button("← Vorige", disabled=cur_page == 0):
+pg_col1, pg_col2, pg_col3 = st.columns([1, 3, 1])
+pg_col2.caption(f"{total_leads} leads · pagina {cur_page + 1} van {total_pages}")
+if pg_col1.button("← Vorige", disabled=cur_page == 0):
+    st.session_state.leads_page = cur_page - 1
+    st.rerun()
+if pg_col3.button("Volgende →", disabled=cur_page >= total_pages - 1):
+    st.session_state.leads_page = cur_page + 1
+    st.rerun()
+
+# ── Tabel ─────────────────────────────────────────────────────────────────────
+if not all_leads:
+    st.info("Geen leads gevonden in deze fase.")
+else:
+    show_page_col = not client_id
+    if show_page_col:
+        col_sizes = [0.4, 1.3, 1.7, 2.5, 1.8, 0.6, 3, 2, 0.5, 0.5]
+        headers   = ["", "Tijd", "Naam", "Gesolliciteerd op", "E-mail", "Bel", "Samenvatting", "Status", "", ""]
+    else:
+        col_sizes = [0.4, 1.3, 1.7, 2, 1.8, 0.6, 3, 2, 0.5, 0.5]
+        headers   = ["", "Tijd", "Naam", "Gesolliciteerd op", "E-mail", "Bel", "Samenvatting", "Status", "", ""]
+
+    hdr = st.columns(col_sizes)
+    for h_col, h_txt in zip(hdr, headers):
+        h_col.markdown(f"**{h_txt}**")
+    st.divider()
+
+    for lead in leads:
+        new_badge = " 🆕" if is_new(lead["created_time"]) else ""
+        row = st.columns(col_sizes)
+        i = 0
+
+        # Checkbox voor bulk
+        checked = lead["id"] in st.session_state.selected_leads
+        if row[i].checkbox("", value=checked, key=f"chk_{lead['id']}", label_visibility="collapsed"):
+            st.session_state.selected_leads.add(lead["id"])
+        else:
+            st.session_state.selected_leads.discard(lead["id"])
+        i += 1
+
+        # Moment van reageren (relatief)
+        row[i].caption(rel_time(lead["created_time"]))
+        i += 1
+
+        # Naam + nieuw-indicator
+        row[i].markdown(f"{lead['full_name'] or '—'}{new_badge}")
+        i += 1
+
+        # Waarop gesolliciteerd: leadformulier/vacature + pagina (klant)
+        vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
+        if show_page_col:
+            row[i].markdown(f"💼 {vacature_label}  \n🏢 {lead['client_name'] or '—'}")
+        else:
+            row[i].markdown(f"💼 {vacature_label}")
+        i += 1
+
+        # E-mail (klikbaar)
+        if lead["email"]:
+            row[i].markdown(f"[{lead['email']}](mailto:{lead['email']})")
+        else:
+            row[i].markdown("—")
+        i += 1
+
+        # Bellen (icoon)
+        if lead["phone"]:
+            row[i].markdown(f"[📞](tel:{lead['phone']})")
+        else:
+            row[i].markdown("—")
+        i += 1
+
+        # AI-samenvatting i.p.v. ruwe formulierantwoorden — direct tonen, automatisch genereren indien nodig
+        render_summary(lead, row[i])
+        i += 1
+
+        # Status / fase dropdown
+        current_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
+        new_status = row[i].selectbox("", STATUSES, index=current_idx,
+                                      key=f"status_{lead['id']}", label_visibility="collapsed")
+        if new_status != lead["status"]:
+            update_status(lead["id"], new_status)
+            clear_cache()
+            st.rerun()
+        i += 1
+
+        # Aantekening knop
+        note_icon = "📝" if lead["notes"] else "🗒️"
+        if row[i].button(note_icon, key=f"note_btn_{lead['id']}", help="Aantekening toevoegen/bewerken"):
+            if st.session_state.open_notes_for == lead["id"]:
+                st.session_state.open_notes_for = None
+            else:
+                st.session_state.open_notes_for = lead["id"]
+            st.rerun()
+        i += 1
+
+        # Detail knop (volledige kaart)
+        if row[i].button("→", key=f"open_{lead['id']}", help="Volledige kaart van kandidaat"):
+            st.session_state.selected_lead_id = lead["id"]
+            st.session_state.page = "detail"
+            st.rerun()
+
+        # Inline aantekening direct onder de rij van de lead
+        if st.session_state.open_notes_for == lead["id"]:
+            render_notes_editor(lead)
+
+    # Net gegenereerde samenvattingen zijn opgeslagen maar zaten nog niet in de
+    # gecachte queryresultaten — herlaad eenmalig zodat ze direct uit cache komen
+    # i.p.v. dat we ze bij elke rerun opnieuw zouden genereren.
+    if st.session_state.get("_new_summaries"):
+        st.session_state._new_summaries = set()
+        clear_cache()
+        st.rerun()
+
+    # Paginering onderaan
+    st.divider()
+    pg2_col1, pg2_col2, pg2_col3 = st.columns([1, 3, 1])
+    pg2_col2.caption(f"Pagina {cur_page + 1} van {total_pages}")
+    if pg2_col1.button("← Vorige ", disabled=cur_page == 0, key="prev2"):
         st.session_state.leads_page = cur_page - 1
         st.rerun()
-    if pg_col3.button("Volgende →", disabled=cur_page >= total_pages - 1):
+    if pg2_col3.button("Volgende → ", disabled=cur_page >= total_pages - 1, key="next2"):
         st.session_state.leads_page = cur_page + 1
         st.rerun()
-
-    # ── Tabel ─────────────────────────────────────────────────────────────────
-    if not all_leads:
-        st.info("Geen leads gevonden.")
-    else:
-        show_page_col = not client_id
-        if show_page_col:
-            col_sizes = [0.4, 1.5, 1.5, 2, 1.8, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
-            headers   = ["", "Datum", "Pagina", "Naam", "Vacature", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
-        else:
-            col_sizes = [0.4, 1.5, 2, 1.8, 2, 1.8, 2.5, 2.5, 0.5, 0.5]
-            headers   = ["", "Datum", "Naam", "Vacature", "E-mail", "Telefoon", "Samenvatting", "Status", "", ""]
-
-        hdr = st.columns(col_sizes)
-        for h_col, h_txt in zip(hdr, headers):
-            h_col.markdown(f"**{h_txt}**")
-        st.divider()
-
-        for lead in leads:
-            new_badge = " 🆕" if is_new(lead["created_time"]) else ""
-            row = st.columns(col_sizes)
-            i = 0
-
-            # Checkbox voor bulk
-            checked = lead["id"] in st.session_state.selected_leads
-            if row[i].checkbox("", value=checked, key=f"chk_{lead['id']}", label_visibility="collapsed"):
-                st.session_state.selected_leads.add(lead["id"])
-            else:
-                st.session_state.selected_leads.discard(lead["id"])
-            i += 1
-
-            # Datum (relatief)
-            row[i].caption(rel_time(lead["created_time"]))
-            i += 1
-
-            # Pagina (alleen in totaaloverzicht)
-            if show_page_col:
-                row[i].caption(lead["client_name"] or "—")
-                i += 1
-
-            # Naam + nieuw-indicator
-            row[i].markdown(f"{lead['full_name'] or '—'}{new_badge}")
-            i += 1
-
-            # Vacature waarop gesolliciteerd is (vacancy_name veld, anders formuliernaam als fallback)
-            vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
-            row[i].caption(f"💼 {vacature_label}" if vacature_label != "—" else "—")
-            i += 1
-
-            # E-mail
-            if lead["email"]:
-                row[i].markdown(f"[{lead['email']}](mailto:{lead['email']})")
-            else:
-                row[i].markdown("—")
-            i += 1
-
-            # Telefoon (klikbaar)
-            if lead["phone"]:
-                row[i].markdown(f"[{lead['phone']}](tel:{lead['phone']})")
-            else:
-                row[i].markdown("—")
-            i += 1
-
-            # AI-samenvatting i.p.v. ruwe formulierantwoorden — direct tonen, automatisch genereren indien nodig
-            render_summary(lead, row[i])
-            i += 1
-
-            # Status dropdown
-            current_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
-            new_status = row[i].selectbox("", STATUSES, index=current_idx,
-                                          key=f"status_{lead['id']}", label_visibility="collapsed")
-            if new_status != lead["status"]:
-                update_status(lead["id"], new_status)
-                clear_cache()
-                st.rerun()
-            i += 1
-
-            # Aantekening knop
-            note_icon = "📝" if lead["notes"] else "🗒️"
-            if row[i].button(note_icon, key=f"note_btn_{lead['id']}", help="Aantekening toevoegen/bewerken"):
-                if st.session_state.open_notes_for == lead["id"]:
-                    st.session_state.open_notes_for = None
-                else:
-                    st.session_state.open_notes_for = lead["id"]
-                st.rerun()
-            i += 1
-
-            # Detail knop
-            if row[i].button("→", key=f"open_{lead['id']}"):
-                st.session_state.selected_lead_id = lead["id"]
-                st.session_state.page = "detail"
-                st.rerun()
-
-            # Inline aantekening direct onder de rij van de lead
-            if st.session_state.open_notes_for == lead["id"]:
-                render_notes_editor(lead)
-
-        # Net gegenereerde samenvattingen zijn opgeslagen maar zaten nog niet in de
-        # gecachte queryresultaten — herlaad eenmalig zodat ze direct uit cache komen
-        # i.p.v. dat we ze bij elke rerun opnieuw zouden genereren.
-        if st.session_state.get("_new_summaries"):
-            st.session_state._new_summaries = set()
-            clear_cache()
-            st.rerun()
-
-        # Paginering onderaan
-        st.divider()
-        pg2_col1, pg2_col2, pg2_col3 = st.columns([1, 3, 1])
-        pg2_col2.caption(f"Pagina {cur_page + 1} van {total_pages}")
-        if pg2_col1.button("← Vorige ", disabled=cur_page == 0, key="prev2"):
-            st.session_state.leads_page = cur_page - 1
-            st.rerun()
-        if pg2_col3.button("Volgende → ", disabled=cur_page >= total_pages - 1, key="next2"):
-            st.session_state.leads_page = cur_page + 1
-            st.rerun()
-
-else:
-    # ── Kanban-bord ───────────────────────────────────────────────────────────
-    if not all_leads:
-        st.info("Geen leads gevonden.")
-    else:
-        MAX_PER_COLUMN = 30
-        show_page_col = not client_id
-        kanban_cols = st.columns(len(STATUSES))
-
-        for status, kcol in zip(STATUSES, kanban_cols):
-            status_leads = [l for l in all_leads if l["status"] == status]
-            emoji = BADGE_EMOJI.get(status, "")
-            with kcol:
-                st.markdown(f"**{emoji} {status}**")
-                st.caption(f"{len(status_leads)} lead{'s' if len(status_leads) != 1 else ''}")
-                with st.container(height=650, border=False):
-                    for lead in status_leads[:MAX_PER_COLUMN]:
-                        new_badge = " 🆕" if is_new(lead["created_time"]) else ""
-                        vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
-                        pagina = lead["client_name"] or "—"
-
-                        with st.container(border=True):
-                            # Regel 1: tijd + naam
-                            st.markdown(f"⏱️ {rel_time(lead['created_time'])} &nbsp;·&nbsp; **{lead['full_name'] or '—'}**{new_badge}")
-
-                            # Regel 2: waarop gesolliciteerd (leadformulier/vacature + pagina)
-                            sub = f"💼 {vacature_label}"
-                            if show_page_col:
-                                sub += f" — 🏢 {pagina}"
-                            st.caption(sub)
-
-                            # Regel 3: AI-samenvatting (kort)
-                            summary = get_or_generate_summary(lead) or "—"
-                            short_summary = summary if len(summary) <= 90 else summary[:90].rsplit(" ", 1)[0] + "…"
-                            st.caption(f"🤖 {short_summary}")
-
-                            # Regel 4: e-mail · bellen · volledige kaart · aantekening
-                            c1, c2, c3, c4 = st.columns(4)
-                            if lead["email"]:
-                                c1.markdown(f"[✉️]({'mailto:' + lead['email']})")
-                            else:
-                                c1.caption("—")
-                            if lead["phone"]:
-                                c2.markdown(f"[📞](tel:{lead['phone']})")
-                            else:
-                                c2.caption("—")
-                            if c3.button("👁️", key=f"kanban_open_{lead['id']}", help="Volledige kaart van kandidaat"):
-                                st.session_state.selected_lead_id = lead["id"]
-                                st.session_state.page = "detail"
-                                st.rerun()
-                            note_icon = "📝" if lead["notes"] else "🗒️"
-                            if c4.button(note_icon, key=f"kanban_note_{lead['id']}", help="Aantekening toevoegen/bewerken"):
-                                if st.session_state.open_notes_for == lead["id"]:
-                                    st.session_state.open_notes_for = None
-                                else:
-                                    st.session_state.open_notes_for = lead["id"]
-                                st.rerun()
-
-                            # Regel 5: fase verplaatsen
-                            current_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
-                            new_status = st.selectbox(
-                                "Status", STATUSES, index=current_idx,
-                                key=f"kanban_status_{lead['id']}", label_visibility="collapsed",
-                            )
-                            if new_status != lead["status"]:
-                                update_status(lead["id"], new_status)
-                                clear_cache()
-                                st.rerun()
-
-                            if st.session_state.open_notes_for == lead["id"]:
-                                render_notes_editor(lead)
-
-                    if len(status_leads) > MAX_PER_COLUMN:
-                        st.caption(f"+{len(status_leads) - MAX_PER_COLUMN} meer — gebruik filters om te verfijnen")
-
-        if st.session_state.get("_new_summaries"):
-            st.session_state._new_summaries = set()
-            clear_cache()
-            st.rerun()
