@@ -244,15 +244,15 @@ hr {
 .client-logo {
     border-radius: 8px;
     object-fit: cover;
-    width: 28px;
-    height: 28px;
-    margin-top: 4px;
+    width: 32px;
+    height: 32px;
+    display: block;
 }
 
 /* Klant-avatar (initialen) als fallback wanneer er geen logo bekend is */
 .client-avatar {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 8px;
     background: linear-gradient(135deg, #8e8e93, #636366);
     color: white;
@@ -261,7 +261,45 @@ hr {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 4px;
+}
+
+/* Klantrij (logo + naam) als één samenhangend, klikbaar geheel */
+.client-row + div[data-testid="stHorizontalBlock"] {
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 12px;
+    margin-bottom: 2px;
+    transition: background 0.15s ease-in-out;
+}
+.client-row + div[data-testid="stHorizontalBlock"]:hover {
+    background: rgba(0,0,0,0.04);
+}
+.client-row-active + div[data-testid="stHorizontalBlock"] {
+    background: rgba(10,132,255,0.1);
+}
+.client-row + div[data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
+    display: flex;
+    justify-content: center;
+}
+.client-row + div[data-testid="stHorizontalBlock"] .stButton > button {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    text-align: left;
+    justify-content: flex-start;
+    padding: 0.3rem 0.4rem;
+    font-weight: 500;
+}
+.client-row + div[data-testid="stHorizontalBlock"] .stButton > button:hover {
+    background: transparent;
+    transform: none;
+    box-shadow: none;
+    text-decoration: underline;
+}
+.client-row + div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
+    color: #0A84FF;
+    font-weight: 700;
 }
 
 /* Labels van inputs/selects iets rustiger en kleiner */
@@ -320,7 +358,9 @@ with st.sidebar:
         is_active_client = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
         is_active_no_vacancy = is_active_client and st.session_state.active_vacancy is None
 
-        col_logo, col_btn = st.columns([1, 5], vertical_alignment="center")
+        row_class = "client-row client-row-active" if is_active_no_vacancy else "client-row"
+        st.markdown(f'<div class="{row_class}"></div>', unsafe_allow_html=True)
+        col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
         if c.get("logo_url"):
             col_logo.markdown(
                 f'<img src="{c["logo_url"]}" class="client-logo">',
