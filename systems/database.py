@@ -122,6 +122,7 @@ def init_db():
             )
         """)
         # Migraties
+        con.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS logo_url TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS form_id TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS vacancy_name TEXT")
         con.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS ai_summary TEXT")
@@ -174,6 +175,11 @@ def add_client(name, page_id):
 def delete_client(client_id):
     with _conn() as con:
         con.execute("DELETE FROM clients WHERE id = %s", (client_id,))
+
+
+def set_client_logo(client_id, logo_url):
+    with _conn() as con:
+        con.execute("UPDATE clients SET logo_url = %s WHERE id = %s", (logo_url, client_id))
 
 
 # ── Forms ─────────────────────────────────────────────────────────────────────

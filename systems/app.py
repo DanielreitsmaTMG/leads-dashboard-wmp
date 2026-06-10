@@ -170,6 +170,75 @@ def is_new(value):
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Leads Dashboard", page_icon="⚡", layout="wide")
 
+# ── Apple-achtige styling: rustige fonts, ronde hoeken, subtiele schaduwen ───
+st.markdown("""
+<style>
+/* Algemeen lettertype */
+html, body, [class*="css"] {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+                 "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+/* Meer ademruimte rond de hoofdcontainer */
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+}
+
+/* Knoppen: rond, zachte schaduw, subtiele hover */
+.stButton > button {
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    transition: all 0.15s ease-in-out;
+    font-weight: 500;
+}
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    border-color: rgba(0,0,0,0.12);
+}
+.stButton > button[kind="primary"] {
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
+}
+
+/* Inputvelden en selectboxen */
+.stTextInput > div > div, .stSelectbox > div > div, .stMultiSelect > div > div {
+    border-radius: 10px !important;
+}
+
+/* Containers met rand → kaartjes met zachte schaduw en ronde hoeken */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 16px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+
+/* Sidebar: lichte achtergrond en strakke afscheiding */
+section[data-testid="stSidebar"] {
+    border-right: 1px solid rgba(0,0,0,0.06);
+}
+section[data-testid="stSidebar"] .stButton > button {
+    text-align: left;
+    justify-content: flex-start;
+}
+
+/* Dividers iets subtieler */
+hr {
+    margin: 0.6rem 0;
+    opacity: 0.15;
+}
+
+/* Klant-logo in de sidebar */
+.client-logo {
+    border-radius: 8px;
+    object-fit: cover;
+    width: 28px;
+    height: 28px;
+    margin-top: 4px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
     st.markdown("## ⚡ Leads Dashboard")
     st.divider()
@@ -187,7 +256,17 @@ with st.sidebar:
     for c in clients:
         is_active_client = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
         is_active_no_vacancy = is_active_client and st.session_state.active_vacancy is None
-        if st.button(f"👤 {c['name']}", use_container_width=True,
+
+        col_logo, col_btn = st.columns([1, 5], vertical_alignment="center")
+        if c.get("logo_url"):
+            col_logo.markdown(
+                f'<img src="{c["logo_url"]}" class="client-logo">',
+                unsafe_allow_html=True,
+            )
+        else:
+            col_logo.markdown("👤")
+
+        if col_btn.button(c["name"], use_container_width=True,
                      type="primary" if is_active_no_vacancy else "secondary",
                      key=f"client_{c['id']}"):
             st.session_state.active_client_id = c["id"]

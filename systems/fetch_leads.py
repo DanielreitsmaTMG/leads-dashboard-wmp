@@ -5,7 +5,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
-from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary, get_form, get_leads_missing_summary
+from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary, get_form, get_leads_missing_summary, set_client_logo
 from ai_assistant import summarize_lead
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
@@ -75,11 +75,33 @@ def _get_page_token(page_id, user_token):
     return None, data.get("error", {}).get("message", "Onbekende fout bij ophalen page token")
 
 
+def _get_page_logo(page_id, page_token):
+    """Haalt de profielfoto-URL van de Facebook-pagina op (logo van de klant)."""
+    try:
+        r = requests.get(
+            f"{META_API_BASE}/{page_id}/picture",
+            params={"type": "normal", "redirect": "false", "access_token": page_token},
+            timeout=15,
+        )
+        data = r.json()
+        return data.get("data", {}).get("url")
+    except Exception:
+        return None
+
+
 def _fetch_client(client_id, page_id, client_name, token):
     errors = []
     page_token, err = _get_page_token(page_id, token)
     if not page_token:
         return 0, [f"Page token ophalen mislukt voor {client_name}: {err}"]
+
+    # Logo van de klant (profielfoto van de Facebook-pagina) bijwerken
+    logo_url = _get_page_logo(page_id, page_token)
+    if logo_url:
+        try:
+            set_client_logo(client_id, logo_url)
+        except Exception:
+            pass
 
     url = f"{META_API_BASE}/{page_id}/leadgen_forms"
     try:

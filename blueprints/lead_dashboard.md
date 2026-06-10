@@ -172,6 +172,33 @@ Gedeelde logica zit in de hulpfuncties `render_summary()` (toont alleen
 bestaande `ai_summary`, genereert NIET live — zie performance-sectie) en
 `render_notes_editor()` in `app.py`.
 
+## Styling: Apple-achtige uitstraling
+
+`app.py` injecteert via `st.markdown(..., unsafe_allow_html=True)` direct na
+`st.set_page_config()` een CSS-blok dat het hele dashboard rustiger en strakker
+maakt: systeemfont (SF Pro/-apple-system), ronde hoeken en zachte schaduwen op
+knoppen/kaarten/inputs, subtiele hover-animatie op knoppen, en een lichte
+scheidingslijn voor de sidebar. Geen losse stylesheet-bestanden — alles zit in
+één CSS-blok bovenaan `app.py` zodat het makkelijk terug te vinden en aan te
+passen is.
+
+## Klantlogo's in de sidebar
+
+Elke klant in de sidebar toont het profielfoto-logo van de bijbehorende
+Facebook-pagina (kolom naast de klantknop, 28x28px afgeronde hoek). Werking:
+
+1. `clients.logo_url` (database.py, `init_db()`-migratie) slaat de URL op.
+2. `fetch_leads.py` → `_get_page_logo(page_id, page_token)` haalt
+   `GET /{page-id}/picture?type=normal&redirect=false` op (retourneert
+   `data.url`) en `_fetch_client()` slaat dit op via `set_client_logo()` —
+   dit loopt dus automatisch mee in elke sync (cron, scheduler, "Vernieuwen").
+3. `app.py` sidebar: `st.columns([1,5])` per klant — logo (of 👤 fallback als
+   `logo_url` ontbreekt) in de eerste kolom, klantknop in de tweede.
+
+Let op: Facebook-profielfoto-URL's met `redirect=false` zijn doorgaans
+langlevende CDN-links, maar kunnen periodiek wijzigen — vandaar dat dit bij
+elke sync wordt ververst i.p.v. eenmalig opgeslagen.
+
 ### Mogelijke vervolgstappen (niet gebouwd, zie gesprek met gebruiker)
 
 - Geautomatiseerd eerste-contact via WhatsApp/SMS direct na binnenkomst van een lead
