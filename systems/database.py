@@ -287,6 +287,25 @@ def update_ai_summary(lead_id, summary):
         )
 
 
+def get_leads_missing_summary(limit=5):
+    """Leads met formulierantwoorden maar nog zonder AI-samenvatting (bv. oudere
+    leads van vóór deze functie, of leads waarvoor de migratie ai_summary heeft
+    gereset). Gebruikt door fetch_leads.py om geleidelijk te backfillen, met een
+    limiet per run i.v.m. de Anthropic-rate-limit."""
+    with _conn() as con:
+        return con.execute(
+            """SELECT l.*, c.name AS client_name, f.form_name
+               FROM leads l
+               LEFT JOIN clients c ON l.client_id = c.id
+               LEFT JOIN forms f ON l.form_id = f.form_id
+               WHERE l.ai_summary IS NULL
+                 AND l.form_data IS NOT NULL AND l.form_data != '{}'
+               ORDER BY l.created_time DESC
+               LIMIT %s""",
+            (limit,),
+        ).fetchall()
+
+
 def get_stale_leads(client_id=None, status="Instroom", hours=24):
     """Leads die al langer dan `hours` uur in `status` staan (op basis van status_updated_at)."""
     query = """

@@ -77,9 +77,15 @@ except Exception as e:
     st.code(f"DATABASE_URL (deels): {url}")
     st.stop()
 
+def _scheduled_sync():
+    fetch_all_clients()
+    from fetch_leads import backfill_summaries
+    backfill_summaries(limit=5)
+
+
 if "scheduler_started" not in st.session_state:
     scheduler = BackgroundScheduler()
-    scheduler.add_job(fetch_all_clients, "interval", minutes=15, id="auto_sync")
+    scheduler.add_job(_scheduled_sync, "interval", minutes=15, id="auto_sync")
     scheduler.start()
     st.session_state.scheduler_started = True
 
@@ -187,6 +193,8 @@ with st.sidebar:
     if st.button("🔄 Vernieuwen", use_container_width=True):
         with st.spinner("Leads ophalen..."):
             n, log = fetch_all_clients()
+            from fetch_leads import backfill_summaries
+            backfill_summaries(limit=5)
             clear_cache()
             for line in log:
                 if "⚠️" in line:
@@ -599,38 +607,21 @@ if st.session_state.selected_leads:
         clear_cache()
         st.rerun()
 
-# ── Hulpfunctie: AI-samenvatting ophalen/genereren ───────────────────────────
-def get_or_generate_summary(lead):
-    """Geeft de bestaande AI-samenvatting terug, of genereert er direct één
-    (en slaat die op) als er formulierantwoorden zijn maar nog geen samenvatting.
-    Retourneert None als er niets te tonen is, of "⚠️ ..." bij een ontbrekende key."""
-    if lead["ai_summary"]:
-        return lead["ai_summary"]
-    form_data = json.loads(lead["form_data"] or "{}")
-    if not form_data:
-        return None
-    with st.spinner("Samenvatting genereren..."):
-        summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"], cached_vacancy_url(lead.get("form_id")))
-    if summary is None:
-        return "⚠️ ANTHROPIC_API_KEY ontbreekt"
-    update_ai_summary(lead["id"], summary)
-    st.session_state.setdefault("_new_summaries", set()).add(lead["id"])
-    return summary
-
-
+# ── Hulpfunctie: AI-samenvatting tonen ───────────────────────────────────────
+# Let op: genereert NIET live tijdens het laden van het overzicht — dat maakte de
+# pagina erg traag (elke ontbrekende samenvatting = een blokkerende API-call,
+# en met de Anthropic-rate-limit van 5/min liep dit al snel op tot minuten).
+# Samenvattingen worden nu gegenereerd:
+#  1. tijdens de GitHub Actions sync voor nieuwe leads (fetch_leads.py), en
+#  2. als achtergrond-backfill voor oudere leads zonder samenvatting (zie
+#     backfill_summaries() in fetch_leads.py, ook tijdens de sync).
+# Hier tonen we gewoon wat er al in de database staat.
 def render_summary(lead, container=None):
-    def _body():
-        summary = get_or_generate_summary(lead)
-        if summary:
-            st.markdown(summary)
-        else:
-            st.caption("—")
-
-    if container is not None:
-        with container:
-            _body()
+    target = container or st
+    if lead["ai_summary"]:
+        target.markdown(lead["ai_summary"])
     else:
-        _body()
+        target.caption("⏳ samenvatting volgt")
 
 
 # ── Hulpfunctie: aantekening-editor ──────────────────────────────────────────
@@ -760,14 +751,6 @@ else:
         # Inline aantekening direct onder de rij van de lead
         if st.session_state.open_notes_for == lead["id"]:
             render_notes_editor(lead)
-
-    # Net gegenereerde samenvattingen zijn opgeslagen maar zaten nog niet in de
-    # gecachte queryresultaten — herlaad eenmalig zodat ze direct uit cache komen
-    # i.p.v. dat we ze bij elke rerun opnieuw zouden genereren.
-    if st.session_state.get("_new_summaries"):
-        st.session_state._new_summaries = set()
-        clear_cache()
-        st.rerun()
 
     # Paginering onderaan
     st.divider()

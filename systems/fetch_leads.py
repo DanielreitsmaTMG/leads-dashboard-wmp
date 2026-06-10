@@ -1,10 +1,11 @@
 import requests
 import os
 import sys
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(__file__))
-from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary, get_form
+from database import get_all_clients, upsert_lead, upsert_form, update_ai_summary, get_form, get_leads_missing_summary
 from ai_assistant import summarize_lead
 
 META_API_BASE = "https://graph.facebook.com/v21.0"
@@ -201,6 +202,33 @@ def _process(raw, client_id, client_name, form_id, form_name=None):
             pass  # AI-samenvatting is een extraatje — sync mag hier niet op stranden
 
 
+def backfill_summaries(limit=5):
+    """Genereert alsnog AI-samenvattingen voor oudere leads die er nog geen hebben
+    (bv. van vóór deze functie bestond, of gereset door een datamigratie).
+    Draait mee in de cron-sync, beperkt tot `limit` per run zodat de
+    Anthropic-rate-limit (5/min) niet wordt overschreden. Bij meer openstaande
+    leads pakt de volgende sync (30 min later) de rest op."""
+    leads = get_leads_missing_summary(limit=limit)
+    n = 0
+    for lead in leads:
+        try:
+            form_data = json.loads(lead["form_data"] or "{}")
+            if not form_data:
+                continue
+            form_row = get_form(lead["form_id"]) if lead.get("form_id") else None
+            vacancy_url = form_row.get("vacancy_url") if form_row else None
+            summary = summarize_lead(
+                lead["full_name"], lead["vacancy_name"], form_data,
+                lead["client_name"], vacancy_url,
+            )
+            if summary and not summary.startswith("⚠️"):
+                update_ai_summary(lead["id"], summary)
+                n += 1
+        except Exception:
+            pass  # backfill is een extraatje — mag niet stranden
+    return n
+
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -210,3 +238,6 @@ if __name__ == "__main__":
     for line in log:
         print(line)
     print(f"Totaal: {total} nieuwe leads")
+    n_backfill = backfill_summaries(limit=5)
+    if n_backfill:
+        print(f"Backfill: {n_backfill} oudere leads van een AI-samenvatting voorzien")

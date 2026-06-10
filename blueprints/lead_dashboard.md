@@ -92,13 +92,26 @@ Functies:
    zodra de recruiter de lead voor het eerst opent, geen wachttijd in de browser.
    Resultaat wordt opgeslagen in `leads.ai_summary` / `ai_summary_at`.
 
-   Als fallback (bv. voor leads die zijn binnengekomen vóórdat deze functie bestond,
-   of als de sync de samenvatting om wat voor reden dan ook miste) genereert het
-   dashboard zelf alsnog automatisch een samenvatting bij het tonen van de leadstabel
-   en de detailpagina — zie `summarize_lead()`-aanroepen in `app.py`.
-
-   `upsert_lead()` retourneert nu `(lead_id, is_new)` zodat `_process()` weet of het
+   `upsert_lead()` retourneert `(lead_id, is_new)` zodat `_process()` weet of het
    om een nieuwe lead gaat (en dus alleen dán een samenvatting hoeft te genereren).
+
+   **Backfill voor oudere leads** (`backfill_summaries()` in `fetch_leads.py`):
+   leads zonder `ai_summary` (bv. van vóór deze functie, of gereset door een
+   migratie) worden geleidelijk alsnog voorzien van een samenvatting — max. 5 per
+   sync-run, om de Anthropic-rate-limit (5/min) niet te raken. Draait mee in:
+   - de GitHub Actions cron-sync (elke 30 min)
+   - de achtergrond-scheduler in `app.py` (`_scheduled_sync`, elke 15 min)
+   - de "🔄 Vernieuwen"-knop in de sidebar
+
+   ⚠️ **BELANGRIJKE LES (performance)**: eerder genereerde het dashboard
+   (`app.py`) zelf live een samenvatting bij het tonen van de leadstabel als
+   `ai_summary` ontbrak. Dit maakte de pagina extreem traag: elke ontbrekende
+   samenvatting = een blokkerende Anthropic API-call, en met de rate-limit van
+   5/min liep een pagina met >5 ontbrekende samenvattingen op tot enkele
+   minuten laadtijd. Dit is VERWIJDERD — `render_summary()` in `app.py` toont nu
+   alleen wat al in de database staat (of "⏳ samenvatting volgt"). Genereer
+   NOOIT AI-content live tijdens het renderen van een lijst/tabel — gebruik
+   altijd de sync/backfill (systems-laag) hiervoor.
 
 2. **Follow-up signalering** — bovenaan het leadsoverzicht verschijnt een waarschuwing
    zodra er leads zijn die langer dan 24 uur op status "Instroom" staan
