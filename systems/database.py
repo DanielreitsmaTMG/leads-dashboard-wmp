@@ -13,21 +13,30 @@ except Exception:
     _HAS_ST = False
 
 STATUSES = [
-    "Review nodig",
-    "Contact mislukt",
+    "Instroom",
     "Gesproken",
-    "Gaat op gesprek",
+    "Komt op gesprek",
+    "Voorstel gedaan",
     "Geplaatst bij klant",
     "Afgewezen",
 ]
 
 STATUS_COLORS = {
-    "Review nodig":        "warning",
-    "Contact mislukt":     "danger",
+    "Instroom":            "warning",
     "Gesproken":           "info",
-    "Gaat op gesprek":     "primary",
+    "Komt op gesprek":     "primary",
+    "Voorstel gedaan":     "violet",
     "Geplaatst bij klant": "success",
     "Afgewezen":           "secondary",
+}
+
+# Omzetting van de oude statusnamen naar de nieuwe fases (eenmalige migratie van
+# bestaande leads, zie init_db()). "Contact mislukt" en "Selectie" bestaan niet
+# meer als aparte fase en vallen samen met "Afgewezen" resp. zijn vervallen.
+_STATUS_MIGRATION = {
+    "Review nodig":     "Instroom",
+    "Gaat op gesprek":  "Komt op gesprek",
+    "Contact mislukt":  "Afgewezen",
 }
 
 
@@ -104,7 +113,7 @@ def init_db():
                 email             TEXT,
                 phone             TEXT,
                 form_data         TEXT,
-                status            TEXT DEFAULT 'Review nodig',
+                status            TEXT DEFAULT 'Instroom',
                 status_updated_at TIMESTAMP DEFAULT NOW(),
                 notes             TEXT DEFAULT '',
                 inserted_at       TIMESTAMP DEFAULT NOW()
@@ -132,6 +141,17 @@ def init_db():
                 changed_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # Migratie naar nieuwe fase-namen (Kanban-pijplijn): bestaande leads en hun
+        # statushistorie krijgen de nieuwe fasenaam volgens _STATUS_MIGRATION.
+        for old_status, new_status in _STATUS_MIGRATION.items():
+            con.execute(
+                "UPDATE leads SET status = %s WHERE status = %s",
+                (new_status, old_status),
+            )
+            con.execute(
+                "UPDATE status_history SET status = %s WHERE status = %s",
+                (new_status, old_status),
+            )
 
 
 # ── Clients ───────────────────────────────────────────────────────────────────
@@ -221,7 +241,7 @@ def upsert_lead(data):
             """INSERT INTO leads
                (meta_lead_id, client_id, form_id, created_time, full_name, email, phone,
                 form_data, vacancy_name, status, status_updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Review nodig', NOW())
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'Instroom', NOW())
                RETURNING id""",
             (
                 data["meta_lead_id"],
@@ -236,7 +256,7 @@ def upsert_lead(data):
             ),
         ).fetchone()
         con.execute(
-            "INSERT INTO status_history (lead_id, status) VALUES (%s, 'Review nodig')",
+            "INSERT INTO status_history (lead_id, status) VALUES (%s, 'Instroom')",
             (row["id"],),
         )
         return row["id"], True
@@ -267,7 +287,7 @@ def update_ai_summary(lead_id, summary):
         )
 
 
-def get_stale_leads(client_id=None, status="Review nodig", hours=24):
+def get_stale_leads(client_id=None, status="Instroom", hours=24):
     """Leads die al langer dan `hours` uur in `status` staan (op basis van status_updated_at)."""
     query = """
         SELECT l.*, c.name AS client_name

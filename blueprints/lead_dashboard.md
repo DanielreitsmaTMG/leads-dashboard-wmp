@@ -38,16 +38,26 @@ python systems/app.py
 # Dashboard: http://localhost:5000
 ```
 
-## Statussen
+## Statussen / fases
 
-| Status | Kleur |
-|--------|-------|
-| Review nodig | geel |
-| Contact mislukt | rood |
-| Gesproken | blauw |
-| Gaat op gesprek | donkerblauw |
-| Geplaatst bij klant | groen |
-| Afgewezen | grijs |
+De fases vormen de Kanban-pijplijn (zie sectie "Kanban-weergave" hieronder) en zijn
+bewust herkenbaar gehouden voor toekomstige automations per fase.
+
+| Status / fase | Kleur | Emoji |
+|--------|-------|-------|
+| Instroom | geel | 🟡 |
+| Gesproken | blauw | 🔵 |
+| Komt op gesprek | paars | 🟣 |
+| Voorstel gedaan | oranje | 🟠 |
+| Geplaatst bij klant | groen | 🟢 |
+| Afgewezen | grijs | ⚫ |
+
+**Migratiehistorie**: dit project gebruikte eerder de namen "Review nodig",
+"Contact mislukt" en "Gaat op gesprek". Bij het opstarten van de app (init_db())
+worden bestaande leads + statushistorie automatisch eenmalig omgezet:
+- "Review nodig" → "Instroom"
+- "Gaat op gesprek" → "Komt op gesprek"
+- "Contact mislukt" → "Afgewezen" (geen aparte fase meer)
 
 ## Kopieren voor nieuwe klant
 
@@ -91,7 +101,7 @@ Functies:
    om een nieuwe lead gaat (en dus alleen dán een samenvatting hoeft te genereren).
 
 2. **Follow-up signalering** — bovenaan het leadsoverzicht verschijnt een waarschuwing
-   zodra er leads zijn die langer dan 24 uur op status "Review nodig" staan
+   zodra er leads zijn die langer dan 24 uur op status "Instroom" staan
    (`get_stale_leads()` in `database.py`, gecached 5 min via `cached_stale_leads`).
 
 3. **AI-vacaturetekst-assistent** — onderaan de instellingenpagina. Recruiter geeft

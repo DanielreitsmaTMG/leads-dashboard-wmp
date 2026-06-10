@@ -43,7 +43,7 @@ def cached_forms(client_id):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_stale_leads(client_id, hours=24):
-    return get_stale_leads(client_id=client_id, status="Review nodig", hours=hours)
+    return get_stale_leads(client_id=client_id, status="Instroom", hours=hours)
 
 @st.cache_data(ttl=300, show_spinner=False)
 def cached_vacancy_url(form_id):
@@ -105,10 +105,10 @@ PAGE_SIZE = 25
 
 # ── Kleurmapping → Streamlit badge-kleuren ────────────────────────────────────
 BADGE_EMOJI = {
-    "Review nodig":        "🟡",
-    "Contact mislukt":     "🔴",
+    "Instroom":            "🟡",
     "Gesproken":           "🔵",
-    "Gaat op gesprek":     "🟣",
+    "Komt op gesprek":     "🟣",
+    "Voorstel gedaan":     "🟠",
     "Geplaatst bij klant": "🟢",
     "Afgewezen":           "⚫",
 }
@@ -518,7 +518,7 @@ if stale:
     )
     extra = f" en {len(stale) - 8} meer" if len(stale) > 8 else ""
     st.warning(
-        f"⏰ **{len(stale)} lead(s)** staan al langer dan 24 uur op 'Review nodig' zonder opvolging: "
+        f"⏰ **{len(stale)} lead(s)** staan al langer dan 24 uur op 'Instroom' zonder opvolging: "
         f"{names}{extra}. Geef ze voorrang!"
     )
 
