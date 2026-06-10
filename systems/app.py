@@ -611,25 +611,32 @@ if st.session_state.selected_leads:
         clear_cache()
         st.rerun()
 
-# ── Hulpfunctie: AI-samenvatting tonen/genereren ─────────────────────────────
-def render_summary(lead, container=None):
-    target = container or st
+# ── Hulpfunctie: AI-samenvatting ophalen/genereren ───────────────────────────
+def get_or_generate_summary(lead):
+    """Geeft de bestaande AI-samenvatting terug, of genereert er direct één
+    (en slaat die op) als er formulierantwoorden zijn maar nog geen samenvatting.
+    Retourneert None als er niets te tonen is, of "⚠️ ..." bij een ontbrekende key."""
+    if lead["ai_summary"]:
+        return lead["ai_summary"]
+    form_data = json.loads(lead["form_data"] or "{}")
+    if not form_data:
+        return None
+    with st.spinner("Samenvatting genereren..."):
+        summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"], cached_vacancy_url(lead.get("form_id")))
+    if summary is None:
+        return "⚠️ ANTHROPIC_API_KEY ontbreekt"
+    update_ai_summary(lead["id"], summary)
+    st.session_state.setdefault("_new_summaries", set()).add(lead["id"])
+    return summary
 
+
+def render_summary(lead, container=None):
     def _body():
-        form_data = json.loads(lead["form_data"] or "{}")
-        if lead["ai_summary"]:
-            target.markdown(lead["ai_summary"])
-        elif form_data:
-            with st.spinner("Samenvatting genereren..."):
-                summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"], cached_vacancy_url(lead.get("form_id")))
-            if summary is None:
-                st.caption("⚠️ ANTHROPIC_API_KEY ontbreekt")
-            else:
-                update_ai_summary(lead["id"], summary)
-                st.session_state.setdefault("_new_summaries", set()).add(lead["id"])
-                st.markdown(summary)
+        summary = get_or_generate_summary(lead)
+        if summary:
+            st.markdown(summary)
         else:
-            target.caption("—")
+            st.caption("—")
 
     if container is not None:
         with container:
@@ -805,28 +812,47 @@ else:
                 with st.container(height=650, border=False):
                     for lead in status_leads[:MAX_PER_COLUMN]:
                         new_badge = " 🆕" if is_new(lead["created_time"]) else ""
+                        vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
+                        pagina = lead["client_name"] or "—"
+
                         with st.container(border=True):
-                            st.markdown(f"**{lead['full_name'] or '—'}**{new_badge}")
+                            # Regel 1: tijd + naam
+                            st.markdown(f"⏱️ {rel_time(lead['created_time'])} &nbsp;·&nbsp; **{lead['full_name'] or '—'}**{new_badge}")
 
-                            vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
-                            if vacature_label != "—":
-                                st.caption(f"💼 {vacature_label}")
+                            # Regel 2: waarop gesolliciteerd (leadformulier/vacature + pagina)
+                            sub = f"💼 {vacature_label}"
                             if show_page_col:
-                                st.caption(f"🏢 {lead['client_name'] or '—'}")
-                            st.caption(rel_time(lead["created_time"]))
+                                sub += f" — 🏢 {pagina}"
+                            st.caption(sub)
 
-                            contact_bits = []
+                            # Regel 3: AI-samenvatting (kort)
+                            summary = get_or_generate_summary(lead) or "—"
+                            short_summary = summary if len(summary) <= 90 else summary[:90].rsplit(" ", 1)[0] + "…"
+                            st.caption(f"🤖 {short_summary}")
+
+                            # Regel 4: e-mail · bellen · volledige kaart · aantekening
+                            c1, c2, c3, c4 = st.columns(4)
                             if lead["email"]:
-                                contact_bits.append(f"[✉️ e-mail](mailto:{lead['email']})")
+                                c1.markdown(f"[✉️]({'mailto:' + lead['email']})")
+                            else:
+                                c1.caption("—")
                             if lead["phone"]:
-                                contact_bits.append(f"[📞 bel](tel:{lead['phone']})")
-                            if contact_bits:
-                                st.caption(" · ".join(contact_bits))
+                                c2.markdown(f"[📞](tel:{lead['phone']})")
+                            else:
+                                c2.caption("—")
+                            if c3.button("👁️", key=f"kanban_open_{lead['id']}", help="Volledige kaart van kandidaat"):
+                                st.session_state.selected_lead_id = lead["id"]
+                                st.session_state.page = "detail"
+                                st.rerun()
+                            note_icon = "📝" if lead["notes"] else "🗒️"
+                            if c4.button(note_icon, key=f"kanban_note_{lead['id']}", help="Aantekening toevoegen/bewerken"):
+                                if st.session_state.open_notes_for == lead["id"]:
+                                    st.session_state.open_notes_for = None
+                                else:
+                                    st.session_state.open_notes_for = lead["id"]
+                                st.rerun()
 
-                            with st.expander("🤖 Samenvatting"):
-                                render_summary(lead)
-
-                            # Status verplaatsen naar andere kolom
+                            # Regel 5: fase verplaatsen
                             current_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
                             new_status = st.selectbox(
                                 "Status", STATUSES, index=current_idx,
@@ -835,19 +861,6 @@ else:
                             if new_status != lead["status"]:
                                 update_status(lead["id"], new_status)
                                 clear_cache()
-                                st.rerun()
-
-                            bcol1, bcol2 = st.columns(2)
-                            note_icon = "📝 Notitie" if lead["notes"] else "🗒️ Notitie"
-                            if bcol1.button(note_icon, key=f"kanban_note_{lead['id']}", use_container_width=True):
-                                if st.session_state.open_notes_for == lead["id"]:
-                                    st.session_state.open_notes_for = None
-                                else:
-                                    st.session_state.open_notes_for = lead["id"]
-                                st.rerun()
-                            if bcol2.button("Details →", key=f"kanban_open_{lead['id']}", use_container_width=True):
-                                st.session_state.selected_lead_id = lead["id"]
-                                st.session_state.page = "detail"
                                 st.rerun()
 
                             if st.session_state.open_notes_for == lead["id"]:
