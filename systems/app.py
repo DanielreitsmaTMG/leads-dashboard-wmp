@@ -614,11 +614,12 @@ if st.session_state.selected_leads:
 # ── Hulpfunctie: AI-samenvatting tonen/genereren ─────────────────────────────
 def render_summary(lead, container=None):
     target = container or st
-    form_data = json.loads(lead["form_data"] or "{}")
-    if lead["ai_summary"]:
-        target.markdown(lead["ai_summary"])
-    elif form_data:
-        with target:
+
+    def _body():
+        form_data = json.loads(lead["form_data"] or "{}")
+        if lead["ai_summary"]:
+            target.markdown(lead["ai_summary"])
+        elif form_data:
             with st.spinner("Samenvatting genereren..."):
                 summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"], cached_vacancy_url(lead.get("form_id")))
             if summary is None:
@@ -627,8 +628,14 @@ def render_summary(lead, container=None):
                 update_ai_summary(lead["id"], summary)
                 st.session_state.setdefault("_new_summaries", set()).add(lead["id"])
                 st.markdown(summary)
+        else:
+            target.caption("—")
+
+    if container is not None:
+        with container:
+            _body()
     else:
-        target.caption("—")
+        _body()
 
 
 # ── Hulpfunctie: aantekening-editor ──────────────────────────────────────────
