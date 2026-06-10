@@ -264,23 +264,25 @@ hr {
 
 /* Klant-logo in de sidebar */
 .client-logo, .client-avatar {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
 }
 .client-logo {
     border-radius: 8px;
     object-fit: cover;
     display: block;
+    border: 1px solid rgba(0,0,0,0.06);
 }
 
 /* Klant-avatar (initialen of icoon) als fallback wanneer er geen logo bekend is */
 .client-avatar {
     border-radius: 8px;
-    background: linear-gradient(135deg, #8e8e93, #636366);
+    background: linear-gradient(135deg, #a1a1a6, #6e6e73);
     color: white;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     font-weight: 600;
+    letter-spacing: 0.02em;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -288,33 +290,45 @@ hr {
 
 /* Klantrij (logo + naam) als één samenhangend, klikbaar geheel: gebruikt
    st.container(border=True), zodat logo + knop binnen dezelfde "doos"
-   vallen i.p.v. los naast elkaar te staan. */
+   vallen i.p.v. los naast elkaar te staan. Apple-achtige, rustige kaart:
+   subtiele rand, geen schaduw in rust, zachte hover/active-states. */
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
-    border-radius: 10px;
-    margin-bottom: 4px;
-    transition: background 0.15s ease-in-out, border-color 0.15s ease-in-out;
+    border-radius: 12px;
+    border-color: rgba(0,0,0,0.06) !important;
+    margin-bottom: 6px;
+    background: transparent;
+    transition: background 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] > div {
+    gap: 0 !important;
 }
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:hover {
-    background: rgba(0,0,0,0.04);
+    background: rgba(0,0,0,0.03);
+    border-color: rgba(0,0,0,0.09) !important;
 }
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.active-row-marker) {
-    background: rgba(10,132,255,0.1);
-    border-color: rgba(10,132,255,0.35);
+    background: #ffffff;
+    border-color: rgba(10,132,255,0.35) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stHorizontalBlock"] {
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.55rem;
+    padding: 0.15rem 0.5rem;
 }
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stColumn"]:first-child {
     display: flex;
     align-items: center;
     justify-content: center;
     flex-grow: 0;
-    width: 32px;
-    min-width: 32px;
+    width: 30px;
+    min-width: 30px;
 }
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stColumn"]:nth-child(2) {
     overflow: hidden;
+}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .stButton {
+    margin: 0;
 }
 section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
     border: none;
@@ -322,8 +336,11 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .s
     background: transparent;
     text-align: left;
     justify-content: flex-start;
-    padding: 0.4rem 0.5rem;
+    padding: 0.5rem 0;
+    margin: 0;
+    font-size: 0.88rem;
     font-weight: 500;
+    color: #1d1d1f;
     height: 38px;
     width: 100%;
     white-space: nowrap;
@@ -340,7 +357,12 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] .s
     background: transparent;
     transform: none;
     box-shadow: none;
-    text-decoration: underline;
+    text-decoration: none;
+    color: #0A84FF;
+}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(.active-row-marker) .stButton > button {
+    color: #0A84FF;
+    font-weight: 600;
 }
 
 /* "Alle klanten"-knop: volle breedte, geen apart icoon. Actieve primaire
