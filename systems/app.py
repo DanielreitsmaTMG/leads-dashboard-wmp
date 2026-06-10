@@ -263,22 +263,23 @@ hr {
 }
 
 /* Klant-logo in de sidebar */
+.client-logo, .client-avatar {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+}
 .client-logo {
     border-radius: 8px;
     object-fit: cover;
-    width: 32px;
-    height: 32px;
     display: block;
 }
 
-/* Klant-avatar (initialen) als fallback wanneer er geen logo bekend is */
+/* Klant-avatar (initialen of icoon) als fallback wanneer er geen logo bekend is */
 .client-avatar {
-    width: 32px;
-    height: 32px;
     border-radius: 8px;
     background: linear-gradient(135deg, #8e8e93, #636366);
     color: white;
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -288,10 +289,10 @@ hr {
 /* Klantrij (logo + naam) als één samenhangend, klikbaar geheel */
 .client-row + div[data-testid="stHorizontalBlock"] {
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.15rem 0.4rem;
-    border-radius: 12px;
-    margin-bottom: 2px;
+    gap: 0.6rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 10px;
+    margin-bottom: 1px;
     transition: background 0.15s ease-in-out;
 }
 .client-row + div[data-testid="stHorizontalBlock"]:hover {
@@ -302,7 +303,14 @@ hr {
 }
 .client-row + div[data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
     display: flex;
+    align-items: center;
     justify-content: center;
+    flex-grow: 0;
+    width: 32px;
+    min-width: 32px;
+}
+.client-row + div[data-testid="stHorizontalBlock"] [data-testid="stColumn"]:nth-child(2) {
+    overflow: hidden;
 }
 .client-row + div[data-testid="stHorizontalBlock"] .stButton > button {
     border: none;
@@ -310,8 +318,19 @@ hr {
     background: transparent;
     text-align: left;
     justify-content: flex-start;
-    padding: 0.3rem 0.4rem;
+    padding: 0.4rem 0.5rem;
     font-weight: 500;
+    height: 38px;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+.client-row + div[data-testid="stHorizontalBlock"] .stButton > button p {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .client-row + div[data-testid="stHorizontalBlock"] .stButton > button:hover {
     background: transparent;
@@ -369,8 +388,14 @@ with st.sidebar:
     st.markdown("**Clients**")
     clients = cached_clients()
 
-    if st.button("🌐 Alle clients", use_container_width=True,
-                 type="primary" if st.session_state.active_client_id is None and st.session_state.page == "leads" else "secondary"):
+    _all_active = st.session_state.active_client_id is None and st.session_state.page == "leads"
+    row_class = "client-row client-row-active" if _all_active else "client-row"
+    st.markdown(f'<div class="{row_class}"></div>', unsafe_allow_html=True)
+    col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
+    col_logo.markdown('<div class="client-avatar">🌐</div>', unsafe_allow_html=True)
+    if col_btn.button("Alle clients", use_container_width=True,
+                 type="primary" if _all_active else "secondary",
+                 key="client_all"):
         st.session_state.active_client_id = None
         st.session_state.active_vacancy = None
         st.session_state.page = "leads"
