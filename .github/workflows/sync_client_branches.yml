@@ -1,0 +1,31 @@
+name: Sync client branches
+
+# Houdt alle client/*-branches (één per klantomgeving, bv. client/achterhuis)
+# automatisch gelijk met main via een fast-forward merge. Zo hoeft een
+# code-update maar op één plek (main) te gebeuren; Streamlit Cloud herdeployt
+# de klant-apps vanzelf zodra hun branch verandert.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward client/* branches naar main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for branch in $(git branch -r | grep 'origin/client/' | sed 's#origin/##'); do
+            echo "Sync $branch -> main"
+            git checkout "$branch"
+            git merge --ff-only origin/main
+            git push origin "$branch"
+          done
