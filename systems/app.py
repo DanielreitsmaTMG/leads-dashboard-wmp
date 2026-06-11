@@ -418,6 +418,22 @@ _fase_card_css = "\n".join(
 )
 st.markdown(f"<style>{_fase_card_css}</style>", unsafe_allow_html=True)
 
+# Streamlit faded standaard nieuwe content in (opacity-transitie op de
+# app-container), waardoor de overgang van inlogscherm naar dashboard
+# "zacht" overloopt. Hard uitzetten zodat het inlogscherm direct plaatsmaakt
+# voor het dashboard, zonder cross-fade.
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+.main .block-container,
+[data-testid="stVerticalBlock"] {
+    transition: none !important;
+    animation: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 AUTH_COOKIE_HOURS = 12
