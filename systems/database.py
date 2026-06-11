@@ -12,13 +12,29 @@ try:
 except Exception:
     _HAS_ST = False
 
+# Naam van de "geplaatst"-fase verschilt per omgeving (WMP: "Geplaatst bij
+# klant", andere omgevingen: "Aangenomen"). Configureerbaar via secrets/.env
+# zodat de WMP-omgeving ongewijzigd blijft.
+def _status_accepted_label():
+    if _HAS_ST:
+        try:
+            val = st.secrets.get("STATUS_ACCEPTED_LABEL")
+            if val:
+                return val
+        except Exception:
+            pass
+    return os.getenv("STATUS_ACCEPTED_LABEL", "Geplaatst bij klant")
+
+
+STATUS_ACCEPTED_LABEL = _status_accepted_label()
+
 STATUSES = [
     "Instroom",
     "Nog geen contact",
     "Gesproken",
     "Komt op gesprek",
     "Voorstel gedaan",
-    "Geplaatst bij klant",
+    STATUS_ACCEPTED_LABEL,
     "Afgewezen",
 ]
 
@@ -28,7 +44,7 @@ STATUS_COLORS = {
     "Gesproken":           "info",
     "Komt op gesprek":     "primary",
     "Voorstel gedaan":     "violet",
-    "Geplaatst bij klant": "success",
+    STATUS_ACCEPTED_LABEL: "success",
     "Afgewezen":           "secondary",
 }
 

@@ -16,7 +16,7 @@ from database import (
     get_forms_for_client, set_form_active, set_form_vacancy_url, get_form,
     get_vacancies_for_client,
     update_ai_summary, get_stale_leads,
-    STATUSES, STATUS_COLORS,
+    STATUSES, STATUS_COLORS, STATUS_ACCEPTED_LABEL,
 )
 from fetch_leads import fetch_all_clients
 from ai_assistant import summarize_lead, suggest_vacancy_text
@@ -137,7 +137,7 @@ BADGE_EMOJI = {
     "Gesproken":           "🔵",
     "Komt op gesprek":     "🟣",
     "Voorstel gedaan":     "🟤",
-    "Geplaatst bij klant": "🟢",
+    STATUS_ACCEPTED_LABEL: "🟢",
     "Afgewezen":           "⚫",
 }
 
@@ -149,7 +149,7 @@ STATUS_HEX = {
     "Gesproken":           "#0A84FF",
     "Komt op gesprek":     "#BF5AF2",
     "Voorstel gedaan":     "#A2845E",
-    "Geplaatst bij klant": "#30D158",
+    STATUS_ACCEPTED_LABEL: "#30D158",
     "Afgewezen":           "#8E8E93",
 }
 
@@ -438,24 +438,45 @@ def _set_auth_cookie(token, max_age_seconds):
 
 
 def _check_login():
-    """Eenvoudige login op basis van LOGIN_USERNAME/LOGIN_PASSWORD in secrets.
-    Elke omgeving (WMP, Het Achterhuis, ...) heeft eigen inloggegevens. Als
-    deze secrets niet zijn ingesteld, is er geen login vereist.
+    """Login op basis van secrets. Elke omgeving (WMP, Het Achterhuis, ...) heeft
+    eigen inloggegevens. Als LOGIN_USERNAME/LOGIN_PASSWORD niet zijn ingesteld,
+    is er geen login vereist.
+
+    LOGIN_USERNAME/LOGIN_PASSWORD geeft volledige toegang (rol "admin", zoals
+    voorheen — WMP blijft dus ongewijzigd). Optioneel kan met
+    CLIENT_LOGIN_USERNAME/CLIENT_LOGIN_PASSWORD een tweede, beperkte rol
+    ("client") worden ingesteld voor de klant zelf (zie _check_login-gebruik
+    in de sidebar voor wat rol "client" wel/niet te zien krijgt).
 
     Een geldige login wordt 12 uur onthouden via een cookie (uitgelezen via
     st.context.cookies, beschikbaar vanaf de eerste request), zodat je niet
     elke keer opnieuw hoeft in te loggen."""
-    expected_user = st.secrets.get("LOGIN_USERNAME")
-    expected_pass = st.secrets.get("LOGIN_PASSWORD")
-    if not expected_user or not expected_pass:
+    admin_user = st.secrets.get("LOGIN_USERNAME")
+    admin_pass = st.secrets.get("LOGIN_PASSWORD")
+    client_user = st.secrets.get("CLIENT_LOGIN_USERNAME")
+    client_pass = st.secrets.get("CLIENT_LOGIN_PASSWORD")
+
+    if not admin_user or not admin_pass:
+        st.session_state.role = "admin"
         return
 
     if st.session_state.get("authenticated"):
         return
 
-    expected_token = hashlib.sha256(f"{expected_user}:{expected_pass}".encode()).hexdigest()
-    if st.context.cookies.get("auth_token") == expected_token:
+    admin_token = hashlib.sha256(f"{admin_user}:{admin_pass}".encode()).hexdigest()
+    client_token = (
+        hashlib.sha256(f"{client_user}:{client_pass}".encode()).hexdigest()
+        if client_user and client_pass else None
+    )
+
+    cookie_token = st.context.cookies.get("auth_token")
+    if cookie_token == admin_token:
         st.session_state.authenticated = True
+        st.session_state.role = "admin"
+        return
+    if client_token and cookie_token == client_token:
+        st.session_state.authenticated = True
+        st.session_state.role = "client"
         return
 
     st.markdown(f"<h2 style='text-align:center; margin-top:4rem;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
@@ -465,9 +486,14 @@ def _check_login():
             username = st.text_input("Gebruikersnaam")
             password = st.text_input("Wachtwoord", type="password")
             if st.form_submit_button("Inloggen", use_container_width=True):
-                if username == expected_user and password == expected_pass:
+                if username == admin_user and password == admin_pass:
                     st.session_state.authenticated = True
-                    _set_auth_cookie(expected_token, AUTH_COOKIE_HOURS * 3600)
+                    st.session_state.role = "admin"
+                    _set_auth_cookie(admin_token, AUTH_COOKIE_HOURS * 3600)
+                elif client_token and username == client_user and password == client_pass:
+                    st.session_state.authenticated = True
+                    st.session_state.role = "client"
+                    _set_auth_cookie(client_token, AUTH_COOKIE_HOURS * 3600)
                 else:
                     st.error("Onjuiste gebruikersnaam of wachtwoord.")
     if not st.session_state.get("authenticated"):
@@ -479,6 +505,13 @@ _check_login()
 with st.sidebar:
     st.markdown(f"## {APP_TITLE}")
     st.divider()
+
+    if st.session_state.get("sync_log"):
+        for line in st.session_state.pop("sync_log"):
+            if "⚠️" in line:
+                st.warning(line)
+            else:
+                st.success(line)
 
     clients = cached_clients()
 
@@ -561,11 +594,7 @@ with st.sidebar:
             from fetch_leads import backfill_summaries
             backfill_summaries(limit=5)
             clear_cache()
-            for line in log:
-                if "⚠️" in line:
-                    st.warning(line)
-                else:
-                    st.success(line)
+            st.session_state.sync_log = log
             st.rerun()
 
     if st.button("✨ Vacature maker", use_container_width=True,
@@ -573,10 +602,11 @@ with st.sidebar:
         st.session_state.page = "vacature_maker"
         st.rerun()
 
-    if st.button("⚙️ Instellingen", use_container_width=True,
-                 type="primary" if st.session_state.page == "settings" else "secondary"):
-        st.session_state.page = "settings"
-        st.rerun()
+    if st.session_state.get("role") != "client":
+        if st.button("⚙️ Instellingen", use_container_width=True,
+                     type="primary" if st.session_state.page == "settings" else "secondary"):
+            st.session_state.page = "settings"
+            st.rerun()
 
     if st.session_state.get("authenticated") and st.secrets.get("LOGIN_USERNAME"):
         if st.button("🚪 Uitloggen", use_container_width=True):
@@ -588,6 +618,10 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════════════════
 # Pagina: Instellingen
 # ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.page == "settings" and st.session_state.get("role") == "client":
+    st.session_state.page = "leads"
+    st.rerun()
+
 if st.session_state.page == "settings":
     st.title("⚙️ Instellingen")
 
@@ -1091,7 +1125,7 @@ if not all_leads:
         "Gesproken":           "Geen leads in deze fase.",
         "Komt op gesprek":     "Geen leads in deze fase.",
         "Voorstel gedaan":     "Geen leads in deze fase.",
-        "Geplaatst bij klant": "Geen leads in deze fase.",
+        STATUS_ACCEPTED_LABEL: "Geen leads in deze fase.",
         "Afgewezen":           "🎉 Geen afgewezen leads in deze selectie.",
     }
     _filter = st.session_state.status_filter_override
