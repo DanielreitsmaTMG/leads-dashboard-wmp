@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import hashlib
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -423,10 +423,18 @@ st.markdown(f"<style>{_fase_card_css}</style>", unsafe_allow_html=True)
 AUTH_COOKIE_HOURS = 12
 
 
-@st.cache_resource(show_spinner=False)
-def _cookie_manager():
-    import extra_streamlit_components as stx
-    return stx.CookieManager(key="auth_cookie_manager")
+def _set_auth_cookie(token, max_age_seconds):
+    """Zet (of verwijdert, met max_age_seconds=0) de auth-cookie via een
+    onzichtbare JS-snippet. We gebruiken hiervoor geen losse component
+    (zoals extra-streamlit-components): die vereist een server-roundtrip
+    via een iframe en bleek de cookie niet betrouwbaar te zetten vóór
+    st.rerun() de pagina al ververste, waardoor de login niet bleef hangen."""
+    import streamlit.components.v1 as components
+    components.html(
+        f"<script>document.cookie = "
+        f"'auth_token={token}; max-age={max_age_seconds}; path=/; SameSite=Lax';</script>",
+        height=0,
+    )
 
 
 def _check_login():
@@ -434,7 +442,8 @@ def _check_login():
     Elke omgeving (WMP, Het Achterhuis, ...) heeft eigen inloggegevens. Als
     deze secrets niet zijn ingesteld, is er geen login vereist.
 
-    Een geldige login wordt 12 uur onthouden via een cookie, zodat je niet
+    Een geldige login wordt 12 uur onthouden via een cookie (uitgelezen via
+    st.context.cookies, beschikbaar vanaf de eerste request), zodat je niet
     elke keer opnieuw hoeft in te loggen."""
     expected_user = st.secrets.get("LOGIN_USERNAME")
     expected_pass = st.secrets.get("LOGIN_PASSWORD")
@@ -445,14 +454,7 @@ def _check_login():
         return
 
     expected_token = hashlib.sha256(f"{expected_user}:{expected_pass}".encode()).hexdigest()
-    cookie_manager = _cookie_manager()
-    cookies = cookie_manager.get_all()
-    if cookies is None:
-        # Cookie-component is nog niet geladen: niets tonen om te voorkomen
-        # dat het inlogscherm even opflitst voordat de geldige sessie bekend is.
-        st.stop()
-
-    if cookies.get("auth_token") == expected_token:
+    if st.context.cookies.get("auth_token") == expected_token:
         st.session_state.authenticated = True
         return
 
@@ -465,15 +467,11 @@ def _check_login():
             if st.form_submit_button("Inloggen", use_container_width=True):
                 if username == expected_user and password == expected_pass:
                     st.session_state.authenticated = True
-                    cookie_manager.set(
-                        "auth_token", expected_token,
-                        expires_at=datetime.now(timezone.utc) + timedelta(hours=AUTH_COOKIE_HOURS),
-                        key="set_auth_cookie",
-                    )
-                    st.rerun()
+                    _set_auth_cookie(expected_token, AUTH_COOKIE_HOURS * 3600)
                 else:
                     st.error("Onjuiste gebruikersnaam of wachtwoord.")
-    st.stop()
+    if not st.session_state.get("authenticated"):
+        st.stop()
 
 
 _check_login()
@@ -583,10 +581,7 @@ with st.sidebar:
     if st.session_state.get("authenticated") and st.secrets.get("LOGIN_USERNAME"):
         if st.button("🚪 Uitloggen", use_container_width=True):
             st.session_state.authenticated = False
-            try:
-                _cookie_manager().delete("auth_token", key="delete_auth_cookie")
-            except KeyError:
-                pass
+            _set_auth_cookie("", 0)
             st.rerun()
 
 
