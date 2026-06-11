@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import hashlib
+import hmac
 from datetime import datetime, timezone
 
 import streamlit as st
@@ -418,44 +419,36 @@ _fase_card_css = "\n".join(
 )
 st.markdown(f"<style>{_fase_card_css}</style>", unsafe_allow_html=True)
 
-# Streamlit faded standaard nieuwe content in (opacity-transitie op de
-# app-container), waardoor de overgang van inlogscherm naar dashboard
-# "zacht" overloopt. Hard uitzetten zodat het inlogscherm direct plaatsmaakt
-# voor het dashboard, zonder cross-fade.
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"],
-[data-testid="stMain"],
-.main .block-container,
-[data-testid="stVerticalBlock"] {
-    transition: none !important;
-    animation: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 
 # ── Login ─────────────────────────────────────────────────────────────────────
+# Persistente login via st.query_params i.p.v. cookies: cookies zetten vanuit
+# een Streamlit-component (iframe + document.cookie) bleek onbetrouwbaar — de
+# iframe laadt asynchroon en st.rerun() verwijdert 'm vaak voordat het script
+# erin draait, waardoor de cookie nooit werd geschreven. Query-params zitten
+# in de URL zelf, overleven dus altijd een page refresh, en zijn ondertekend
+# (HMAC) met een vervaldatum zodat ze na AUTH_COOKIE_HOURS automatisch
+# ongeldig worden.
 AUTH_COOKIE_HOURS = 12
 
 
-def _set_auth_cookie(token, max_age_seconds):
-    """Zet (of verwijdert, met max_age_seconds=0) de auth-cookie via een
-    onzichtbare JS-snippet. We gebruiken hiervoor geen losse component
-    (zoals extra-streamlit-components): die vereist een server-roundtrip
-    via een iframe en bleek de cookie niet betrouwbaar te zetten vóór
-    st.rerun() de pagina al ververste, waardoor de login niet bleef hangen."""
-    import streamlit.components.v1 as components
-    components.html(
-        f"<script>document.cookie = "
-        f"'auth_token={token}; max-age={max_age_seconds}; path=/; SameSite=Lax; Secure';</script>",
-        height=0,
-    )
-    # Geef de browser even de tijd om de srcdoc-iframe daadwerkelijk te laden
-    # en het script erin uit te voeren vóórdat st.rerun() de iframe alweer
-    # verwijdert — anders wordt de cookie nooit geschreven.
-    import time
-    time.sleep(0.3)
+def _make_session_token(role, secret, hours):
+    expiry = int(datetime.now(timezone.utc).timestamp()) + hours * 3600
+    payload = f"{role}:{expiry}"
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def _verify_session_token(token, secret):
+    try:
+        role, expiry, sig = token.split(":")
+    except ValueError:
+        return None
+    expected_sig = hmac.new(secret.encode(), f"{role}:{expiry}".encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return None
+    if int(datetime.now(timezone.utc).timestamp()) > int(expiry):
+        return None
+    return role
 
 
 def _check_login():
@@ -469,9 +462,9 @@ def _check_login():
     ("client") worden ingesteld voor de klant zelf (zie _check_login-gebruik
     in de sidebar voor wat rol "client" wel/niet te zien krijgt).
 
-    Een geldige login wordt 12 uur onthouden via een cookie (uitgelezen via
-    st.context.cookies, beschikbaar vanaf de eerste request), zodat je niet
-    elke keer opnieuw hoeft in te loggen."""
+    Een geldige login wordt 12 uur onthouden via een ondertekende token in de
+    URL (?auth=...), zodat je niet elke keer opnieuw hoeft in te loggen, ook
+    niet na een volledige page refresh."""
     admin_user = st.secrets.get("LOGIN_USERNAME")
     admin_pass = st.secrets.get("LOGIN_PASSWORD")
     client_user = st.secrets.get("CLIENT_LOGIN_USERNAME")
@@ -484,21 +477,15 @@ def _check_login():
     if st.session_state.get("authenticated"):
         return
 
-    admin_token = hashlib.sha256(f"{admin_user}:{admin_pass}".encode()).hexdigest()
-    client_token = (
-        hashlib.sha256(f"{client_user}:{client_pass}".encode()).hexdigest()
-        if client_user and client_pass else None
-    )
+    token_secret = hashlib.sha256(f"{admin_user}:{admin_pass}".encode()).hexdigest()
 
-    cookie_token = st.context.cookies.get("auth_token")
-    if cookie_token == admin_token:
-        st.session_state.authenticated = True
-        st.session_state.role = "admin"
-        return
-    if client_token and cookie_token == client_token:
-        st.session_state.authenticated = True
-        st.session_state.role = "client"
-        return
+    qp_token = st.query_params.get("auth")
+    if qp_token:
+        role = _verify_session_token(qp_token, token_secret)
+        if role:
+            st.session_state.authenticated = True
+            st.session_state.role = role
+            return
 
     st.markdown(f"<h2 style='text-align:center; margin-top:4rem;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
     _, col, _ = st.columns([1, 1.2, 1])
@@ -508,17 +495,17 @@ def _check_login():
             password = st.text_input("Wachtwoord", type="password")
             if st.form_submit_button("Inloggen", use_container_width=True):
                 if username == admin_user and password == admin_pass:
-                    st.session_state.authenticated = True
-                    st.session_state.role = "admin"
-                    _set_auth_cookie(admin_token, AUTH_COOKIE_HOURS * 3600)
-                    st.rerun()
-                elif client_token and username == client_user and password == client_pass:
-                    st.session_state.authenticated = True
-                    st.session_state.role = "client"
-                    _set_auth_cookie(client_token, AUTH_COOKIE_HOURS * 3600)
-                    st.rerun()
+                    role = "admin"
+                elif client_user and client_pass and username == client_user and password == client_pass:
+                    role = "client"
                 else:
+                    role = None
                     st.error("Onjuiste gebruikersnaam of wachtwoord.")
+                if role:
+                    st.session_state.authenticated = True
+                    st.session_state.role = role
+                    st.query_params["auth"] = _make_session_token(role, token_secret, AUTH_COOKIE_HOURS)
+                    st.rerun()
     if not st.session_state.get("authenticated"):
         st.stop()
 
@@ -634,7 +621,8 @@ with st.sidebar:
     if st.session_state.get("authenticated") and st.secrets.get("LOGIN_USERNAME"):
         if st.button("🚪 Uitloggen", use_container_width=True):
             st.session_state.authenticated = False
-            _set_auth_cookie("", 0)
+            st.session_state.pop("role", None)
+            st.query_params.pop("auth", None)
             st.rerun()
 
 
