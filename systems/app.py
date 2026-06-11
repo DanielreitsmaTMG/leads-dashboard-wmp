@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import hashlib
 from datetime import datetime, timezone, timedelta
 
 import streamlit as st
@@ -419,16 +420,40 @@ st.markdown(f"<style>{_fase_card_css}</style>", unsafe_allow_html=True)
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
+AUTH_COOKIE_HOURS = 12
+
+
+@st.cache_resource(show_spinner=False)
+def _cookie_manager():
+    import extra_streamlit_components as stx
+    return stx.CookieManager(key="auth_cookie_manager")
+
+
 def _check_login():
     """Eenvoudige login op basis van LOGIN_USERNAME/LOGIN_PASSWORD in secrets.
     Elke omgeving (WMP, Het Achterhuis, ...) heeft eigen inloggegevens. Als
-    deze secrets niet zijn ingesteld, is er geen login vereist."""
+    deze secrets niet zijn ingesteld, is er geen login vereist.
+
+    Een geldige login wordt 12 uur onthouden via een cookie, zodat je niet
+    elke keer opnieuw hoeft in te loggen."""
     expected_user = st.secrets.get("LOGIN_USERNAME")
     expected_pass = st.secrets.get("LOGIN_PASSWORD")
     if not expected_user or not expected_pass:
         return
 
     if st.session_state.get("authenticated"):
+        return
+
+    expected_token = hashlib.sha256(f"{expected_user}:{expected_pass}".encode()).hexdigest()
+    cookie_manager = _cookie_manager()
+    cookies = cookie_manager.get_all()
+    if cookies is None:
+        # Cookie-component is nog niet geladen: niets tonen om te voorkomen
+        # dat het inlogscherm even opflitst voordat de geldige sessie bekend is.
+        st.stop()
+
+    if cookies.get("auth_token") == expected_token:
+        st.session_state.authenticated = True
         return
 
     st.markdown(f"<h2 style='text-align:center; margin-top:4rem;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
@@ -440,6 +465,11 @@ def _check_login():
             if st.form_submit_button("Inloggen", use_container_width=True):
                 if username == expected_user and password == expected_pass:
                     st.session_state.authenticated = True
+                    cookie_manager.set(
+                        "auth_token", expected_token,
+                        expires_at=datetime.now(timezone.utc) + timedelta(hours=AUTH_COOKIE_HOURS),
+                        key="set_auth_cookie",
+                    )
                     st.rerun()
                 else:
                     st.error("Onjuiste gebruikersnaam of wachtwoord.")
@@ -518,9 +548,13 @@ with st.sidebar:
         st.session_state.page = "settings"
         st.rerun()
 
-    if st.session_state.get("authenticated"):
+    if st.session_state.get("authenticated") and st.secrets.get("LOGIN_USERNAME"):
         if st.button("🚪 Uitloggen", use_container_width=True):
             st.session_state.authenticated = False
+            try:
+                _cookie_manager().delete("auth_token", key="delete_auth_cookie")
+            except KeyError:
+                pass
             st.rerun()
 
 
