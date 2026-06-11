@@ -16,7 +16,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests python-dotenv psycopg[binary] apscheduler anthropic
+        run: pip install requests python-dotenv psycopg[binary] psycopg-pool apscheduler anthropic
 
       - name: Sync leads
         env:
