@@ -38,16 +38,6 @@ STATUSES = [
     "Afgewezen",
 ]
 
-STATUS_COLORS = {
-    "Instroom":            "warning",
-    "Nog geen contact":    "orange",
-    "Gesproken":           "info",
-    "Komt op gesprek":     "primary",
-    "Voorstel gedaan":     "violet",
-    STATUS_ACCEPTED_LABEL: "success",
-    "Afgewezen":           "secondary",
-}
-
 # Omzetting van de oude statusnamen naar de nieuwe fases (eenmalige migratie van
 # bestaande leads, zie init_db()). "Contact mislukt" en "Selectie" bestaan niet
 # meer als aparte fase en vallen samen met "Afgewezen" resp. zijn vervallen.

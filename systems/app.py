@@ -17,7 +17,7 @@ from database import (
     get_forms_for_client, set_form_active, set_form_vacancy_url, get_form,
     get_vacancies_for_client,
     update_ai_summary, get_stale_leads,
-    STATUSES, STATUS_COLORS, STATUS_ACCEPTED_LABEL,
+    STATUSES, STATUS_ACCEPTED_LABEL,
 )
 from fetch_leads import fetch_all_clients
 from ai_assistant import summarize_lead, suggest_vacancy_text
