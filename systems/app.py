@@ -482,41 +482,86 @@ with st.sidebar:
     st.markdown(f"## {APP_TITLE}")
     st.divider()
 
-    st.markdown("**Clients**")
     clients = cached_clients()
 
-    _all_active = st.session_state.active_client_id is None and st.session_state.page == "leads"
-    if st.button("Alle klanten", use_container_width=True,
-                 type="primary" if _all_active else "secondary",
-                 key="client_all"):
-        st.session_state.active_client_id = None
-        st.session_state.active_vacancy = None
-        st.session_state.page = "leads"
-        st.rerun()
+    if len(clients) == 1:
+        # Dedicated omgeving: deze deployment is voor één klant. In plaats van
+        # een klantenlijst tonen we het logo/naam van de klant als header en
+        # navigeren we op vacature.
+        client = clients[0]
+        st.session_state.active_client_id = client["id"]
 
-    for c in clients:
-        is_active_client = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
-        is_active_no_vacancy = is_active_client and st.session_state.active_vacancy is None
-
-        marker = '<span class="active-row-marker"></span>' if is_active_no_vacancy else ""
         with st.container(border=True):
-            col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
-            if c.get("logo_url"):
-                col_logo.markdown(
-                    f'<img src="{c["logo_url"]}" class="client-logo">{marker}',
-                    unsafe_allow_html=True,
-                )
+            col_logo, col_name = st.columns([1, 5], gap="small", vertical_alignment="center")
+            if client.get("logo_url"):
+                col_logo.markdown(f'<img src="{client["logo_url"]}" class="client-logo">', unsafe_allow_html=True)
             else:
-                initials = "".join(w[0] for w in c["name"].split()[:2]).upper() or "?"
-                col_logo.markdown(f'<div class="client-avatar">{initials}</div>{marker}', unsafe_allow_html=True)
+                initials = "".join(w[0] for w in client["name"].split()[:2]).upper() or "?"
+                col_logo.markdown(f'<div class="client-avatar">{initials}</div>', unsafe_allow_html=True)
+            col_name.markdown(
+                f"<div style='font-weight:600; font-size:0.95rem; padding:0.4rem 0;'>{client['name']}</div>",
+                unsafe_allow_html=True,
+            )
 
-            if col_btn.button(c["name"], use_container_width=True,
-                         type="primary" if is_active_no_vacancy else "secondary",
-                         key=f"client_{c['id']}"):
-                st.session_state.active_client_id = c["id"]
-                st.session_state.active_vacancy = None
-                st.session_state.page = "leads"
-                st.rerun()
+        st.divider()
+        st.markdown("**Vacatures**")
+        vacancies = cached_vacancies(client["id"])
+
+        _all_active = st.session_state.active_vacancy is None and st.session_state.page == "leads"
+        if st.button("Alle vacatures", use_container_width=True,
+                     type="primary" if _all_active else "secondary",
+                     key="vacancy_all"):
+            st.session_state.active_vacancy = None
+            st.session_state.page = "leads"
+            st.rerun()
+
+        for v in vacancies:
+            is_active_vacancy = st.session_state.active_vacancy == v and st.session_state.page == "leads"
+            marker = '<span class="active-row-marker"></span>' if is_active_vacancy else ""
+            with st.container(border=True):
+                col_icon, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
+                col_icon.markdown(f'<div class="client-avatar">💼</div>{marker}', unsafe_allow_html=True)
+                if col_btn.button(v, use_container_width=True,
+                             type="primary" if is_active_vacancy else "secondary",
+                             key=f"vacancy_{v}"):
+                    st.session_state.active_vacancy = v
+                    st.session_state.page = "leads"
+                    st.rerun()
+    else:
+        st.markdown("**Clients**")
+
+        _all_active = st.session_state.active_client_id is None and st.session_state.page == "leads"
+        if st.button("Alle klanten", use_container_width=True,
+                     type="primary" if _all_active else "secondary",
+                     key="client_all"):
+            st.session_state.active_client_id = None
+            st.session_state.active_vacancy = None
+            st.session_state.page = "leads"
+            st.rerun()
+
+        for c in clients:
+            is_active_client = st.session_state.active_client_id == c["id"] and st.session_state.page == "leads"
+            is_active_no_vacancy = is_active_client and st.session_state.active_vacancy is None
+
+            marker = '<span class="active-row-marker"></span>' if is_active_no_vacancy else ""
+            with st.container(border=True):
+                col_logo, col_btn = st.columns([1, 5], gap="small", vertical_alignment="center")
+                if c.get("logo_url"):
+                    col_logo.markdown(
+                        f'<img src="{c["logo_url"]}" class="client-logo">{marker}',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    initials = "".join(w[0] for w in c["name"].split()[:2]).upper() or "?"
+                    col_logo.markdown(f'<div class="client-avatar">{initials}</div>{marker}', unsafe_allow_html=True)
+
+                if col_btn.button(c["name"], use_container_width=True,
+                             type="primary" if is_active_no_vacancy else "secondary",
+                             key=f"client_{c['id']}"):
+                    st.session_state.active_client_id = c["id"]
+                    st.session_state.active_vacancy = None
+                    st.session_state.page = "leads"
+                    st.rerun()
 
     st.divider()
     st.markdown(
