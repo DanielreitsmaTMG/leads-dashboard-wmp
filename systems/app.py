@@ -448,9 +448,14 @@ def _set_auth_cookie(token, max_age_seconds):
     import streamlit.components.v1 as components
     components.html(
         f"<script>document.cookie = "
-        f"'auth_token={token}; max-age={max_age_seconds}; path=/; SameSite=Lax';</script>",
+        f"'auth_token={token}; max-age={max_age_seconds}; path=/; SameSite=Lax; Secure';</script>",
         height=0,
     )
+    # Geef de browser even de tijd om de srcdoc-iframe daadwerkelijk te laden
+    # en het script erin uit te voeren vóórdat st.rerun() de iframe alweer
+    # verwijdert — anders wordt de cookie nooit geschreven.
+    import time
+    time.sleep(0.3)
 
 
 def _check_login():
