@@ -98,16 +98,29 @@ def _get_pool():
             max_size=5,
             kwargs={"row_factory": dict_row},
             open=True,
+            # Neon zet de compute na inactiviteit op "slapen"; een hergebruikte
+            # pool-connectie naar een geslapen endpoint geeft dan
+            # psycopg.errors.AdminShutdown. check_connection valideert elke
+            # connectie bij het lenen uit de pool en vervangt 'm zo nodig.
+            check=ConnectionPool.check_connection,
         )
     return _pool
 
 
 @contextmanager
 def _conn():
+    global _pool
     pool = _get_pool()
-    with pool.connection() as con:
-        yield con
-        con.commit()
+    try:
+        with pool.connection() as con:
+            yield con
+            con.commit()
+    except psycopg.OperationalError:
+        # Pool zelf is in een slechte staat (bv. na een Neon-restart) — sluit
+        # 'm en bouw 'm opnieuw op voor de volgende poging.
+        pool.close()
+        _pool = None
+        raise
 
 
 def init_db():
