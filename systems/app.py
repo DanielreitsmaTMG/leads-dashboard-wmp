@@ -491,19 +491,6 @@ with st.sidebar:
         client = clients[0]
         st.session_state.active_client_id = client["id"]
 
-        with st.container(border=True):
-            col_logo, col_name = st.columns([1, 5], gap="small", vertical_alignment="center")
-            if client.get("logo_url"):
-                col_logo.markdown(f'<img src="{client["logo_url"]}" class="client-logo">', unsafe_allow_html=True)
-            else:
-                initials = "".join(w[0] for w in client["name"].split()[:2]).upper() or "?"
-                col_logo.markdown(f'<div class="client-avatar">{initials}</div>', unsafe_allow_html=True)
-            col_name.markdown(
-                f"<div style='font-weight:600; font-size:0.95rem; padding:0.4rem 0;'>{client['name']}</div>",
-                unsafe_allow_html=True,
-            )
-
-        st.divider()
         st.markdown("**Vacatures**")
         vacancies = cached_vacancies(client["id"])
 
