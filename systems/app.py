@@ -193,8 +193,12 @@ def is_new(value):
         return False
 
 
+# ── Branding (per omgeving in te stellen via secrets, bv. voor een
+#    klant-specifieke deployment met eigen naam) ──────────────────────────────
+APP_TITLE = st.secrets.get("APP_TITLE", "⚡ Leads Dashboard")
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Leads Dashboard", page_icon="⚡", layout="wide")
+st.set_page_config(page_title=APP_TITLE, page_icon="⚡", layout="wide")
 
 # ── Apple-achtige styling: rustige fonts, ronde hoeken, subtiele schaduwen ───
 st.markdown("""
@@ -413,8 +417,39 @@ _fase_card_css = "\n".join(
 )
 st.markdown(f"<style>{_fase_card_css}</style>", unsafe_allow_html=True)
 
+
+# ── Login ─────────────────────────────────────────────────────────────────────
+def _check_login():
+    """Eenvoudige login op basis van LOGIN_USERNAME/LOGIN_PASSWORD in secrets.
+    Elke omgeving (WMP, Het Achterhuis, ...) heeft eigen inloggegevens. Als
+    deze secrets niet zijn ingesteld, is er geen login vereist."""
+    expected_user = st.secrets.get("LOGIN_USERNAME")
+    expected_pass = st.secrets.get("LOGIN_PASSWORD")
+    if not expected_user or not expected_pass:
+        return
+
+    if st.session_state.get("authenticated"):
+        return
+
+    st.markdown(f"<h2 style='text-align:center; margin-top:4rem;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
+    _, col, _ = st.columns([1, 1.2, 1])
+    with col:
+        with st.form("login_form"):
+            username = st.text_input("Gebruikersnaam")
+            password = st.text_input("Wachtwoord", type="password")
+            if st.form_submit_button("Inloggen", use_container_width=True):
+                if username == expected_user and password == expected_pass:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Onjuiste gebruikersnaam of wachtwoord.")
+    st.stop()
+
+
+_check_login()
+
 with st.sidebar:
-    st.markdown("## ⚡ Leads Dashboard")
+    st.markdown(f"## {APP_TITLE}")
     st.divider()
 
     st.markdown("**Clients**")
@@ -482,6 +517,11 @@ with st.sidebar:
                  type="primary" if st.session_state.page == "settings" else "secondary"):
         st.session_state.page = "settings"
         st.rerun()
+
+    if st.session_state.get("authenticated"):
+        if st.button("🚪 Uitloggen", use_container_width=True):
+            st.session_state.authenticated = False
+            st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
