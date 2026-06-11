@@ -490,10 +490,12 @@ def _check_login():
                     st.session_state.authenticated = True
                     st.session_state.role = "admin"
                     _set_auth_cookie(admin_token, AUTH_COOKIE_HOURS * 3600)
+                    st.rerun()
                 elif client_token and username == client_user and password == client_pass:
                     st.session_state.authenticated = True
                     st.session_state.role = "client"
                     _set_auth_cookie(client_token, AUTH_COOKIE_HOURS * 3600)
+                    st.rerun()
                 else:
                     st.error("Onjuiste gebruikersnaam of wachtwoord.")
     if not st.session_state.get("authenticated"):
