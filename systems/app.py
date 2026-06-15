@@ -1267,6 +1267,7 @@ else:
         if new_status != lead["status"]:
             update_status(lead["id"], new_status)
             clear_cache()
+            st.toast(f"{BADGE_EMOJI.get(new_status, '')} Status van {lead['full_name'] or 'lead'} gewijzigd naar **{new_status}**")
             st.rerun()
         i += 1
 
