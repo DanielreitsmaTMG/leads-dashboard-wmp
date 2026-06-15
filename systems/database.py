@@ -189,6 +189,16 @@ def init_db():
                 changed_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        # Tombstone-tabel: meta_lead_id's die handmatig verwijderd zijn. De sync
+        # haalt bij elke run ALLE leads van Meta op (geen datumfilter mogelijk op
+        # de /leads-edge), dus zonder deze tabel komen verwijderde leads bij de
+        # volgende sync gewoon terug. upsert_lead() slaat ID's hierin over.
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS deleted_leads (
+                meta_lead_id TEXT PRIMARY KEY,
+                deleted_at   TIMESTAMP DEFAULT NOW()
+            )
+        """)
         # Migratie naar nieuwe fase-namen (Kanban-pijplijn): bestaande leads en hun
         # statushistorie krijgen de nieuwe fasenaam volgens _STATUS_MIGRATION.
         for old_status, new_status in _STATUS_MIGRATION.items():
@@ -276,6 +286,11 @@ def get_active_form_ids(client_id=None):
 
 def upsert_lead(data):
     with _conn() as con:
+        if con.execute(
+            "SELECT 1 FROM deleted_leads WHERE meta_lead_id = %s",
+            (data["meta_lead_id"],)
+        ).fetchone():
+            return None, False
         existing = con.execute(
             "SELECT id, full_name, email, phone FROM leads WHERE meta_lead_id = %s",
             (data["meta_lead_id"],)
@@ -313,6 +328,25 @@ def upsert_lead(data):
             (row["id"],),
         )
         return row["id"], True
+
+
+def delete_leads_before(date_str):
+    """Verwijdert permanent alle leads met created_time vóór date_str (incl.
+    statushistorie) en onthoudt hun meta_lead_id in deleted_leads, zodat de
+    sync ze niet opnieuw aanmaakt. Retourneert het aantal verwijderde leads."""
+    with _conn() as con:
+        con.execute(
+            """INSERT INTO deleted_leads (meta_lead_id)
+               SELECT meta_lead_id FROM leads WHERE created_time < %s
+               ON CONFLICT DO NOTHING""",
+            (date_str,),
+        )
+        con.execute(
+            "DELETE FROM status_history WHERE lead_id IN (SELECT id FROM leads WHERE created_time < %s)",
+            (date_str,),
+        )
+        cur = con.execute("DELETE FROM leads WHERE created_time < %s", (date_str,))
+        return cur.rowcount
 
 
 def update_status(lead_id, status):
