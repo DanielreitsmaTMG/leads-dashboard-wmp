@@ -298,10 +298,16 @@ def upsert_lead(data):
         ).fetchone()
         if existing:
             updates, params = [], []
-            for field in ("full_name", "email", "phone", "vacancy_name"):
+            # Naam/email/telefoon: alleen invullen als nog leeg (gebruiker kan dit zelf aanvullen).
+            for field in ("full_name", "email", "phone"):
                 if not existing.get(field) and data.get(field):
                     updates.append(f"{field} = %s")
                     params.append(data[field])
+            # Vacancy_name: altijd bijwerken zodat formuliernaamswijzigingen
+            # (of eerdere foute waarden) direct gecorrigeerd worden.
+            if data.get("vacancy_name") and data["vacancy_name"] != existing.get("vacancy_name"):
+                updates.append("vacancy_name = %s")
+                params.append(data["vacancy_name"])
             if updates:
                 params.append(existing["id"])
                 con.execute(f"UPDATE leads SET {', '.join(updates)} WHERE id = %s", params)
