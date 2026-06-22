@@ -271,6 +271,7 @@ def get_form(form_id):
         return con.execute("SELECT * FROM forms WHERE form_id = %s", (form_id,)).fetchone()
 
 
+
 def get_active_form_ids(client_id=None):
     with _conn() as con:
         if client_id:

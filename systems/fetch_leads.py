@@ -168,9 +168,7 @@ def _process(raw, client_id, client_name, form_id, form_name=None):
         if not val:
             continue
 
-        if _matches_vacancy(key, VACANCY_KEYWORDS):
-            vacancy = val
-        elif _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
+        if _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
             full = val
         elif _matches(key, FIRST_KEYWORDS):
             first.append(val)
@@ -193,11 +191,7 @@ def _process(raw, client_id, client_name, form_id, form_name=None):
         if first_val:
             full = first_val
 
-    # Vacature: als er geen expliciet "Vacaturenaam"-veld is ingevuld, val terug op de
-    # naam van het leadformulier zelf — zo is er altijd een concrete vacature-referentie
-    # beschikbaar voor weergave én voor de AI-samenvatting/matchmaker.
-    if not vacancy:
-        vacancy = form_name
+    vacancy = form_name
 
     lead_id, is_new = upsert_lead({
         "meta_lead_id": raw["id"],
