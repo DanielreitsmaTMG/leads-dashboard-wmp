@@ -857,8 +857,8 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
     st.markdown(f"## {lead['full_name'] or 'Onbekende naam'}")
     if lead["client_name"]:
         st.caption(f"Client: {lead['client_name']}")
-    if lead["vacancy_name"]:
-        st.caption(f"💼 Gesolliciteerd op: {lead['vacancy_name']}")
+    if lead["form_name"]:
+        st.caption(f"💼 Gesolliciteerd op: {lead['form_name']}")
 
     # ── Pijplijn-stepper: visueel overzicht van de huidige fase ─────────────────
     _cur_idx = STATUSES.index(lead["status"]) if lead["status"] in STATUSES else 0
@@ -925,7 +925,7 @@ elif st.session_state.page == "detail" and st.session_state.selected_lead_id:
             btn_label = "✨ Genereer samenvatting"
         if st.button(btn_label, key="gen_summary"):
             with st.spinner("Bezig met analyseren..."):
-                summary = summarize_lead(lead["full_name"], lead["vacancy_name"], form_data, lead["client_name"], cached_vacancy_url(lead.get("form_id")))
+                summary = summarize_lead(lead["full_name"], lead["form_name"], form_data, lead["client_name"], cached_vacancy_url(lead.get("form_id")))
             if summary is None:
                 st.warning("ANTHROPIC_API_KEY ontbreekt — voeg deze toe aan de secrets om deze functie te gebruiken.")
             else:
@@ -1229,7 +1229,7 @@ else:
         i += 1
 
         # Waarop gesolliciteerd: leadformulier/vacature + pagina (klant)
-        vacature_label = lead["vacancy_name"] or lead["form_name"] or "—"
+        vacature_label = lead["form_name"] or "—"
         if show_page_col:
             row[i].markdown(f"💼 {vacature_label}  \n🏢 {lead['client_name'] or '—'}")
         else:

@@ -421,12 +421,13 @@ def get_stale_leads(client_id=None, status="Instroom", hours=24):
 def get_vacancies_for_client(client_id):
     with _conn() as con:
         rows = con.execute(
-            """SELECT DISTINCT vacancy_name FROM leads
-               WHERE client_id = %s AND vacancy_name IS NOT NULL AND vacancy_name != ''
-               ORDER BY vacancy_name""",
+            """SELECT DISTINCT f.form_name FROM leads l
+               JOIN forms f ON l.form_id = f.form_id
+               WHERE l.client_id = %s AND f.form_name IS NOT NULL
+               ORDER BY f.form_name""",
             (client_id,),
         ).fetchall()
-    return [r["vacancy_name"] for r in rows]
+    return [r["form_name"] for r in rows]
 
 
 def get_leads(client_id=None, status_filter=None, search=None, days=7, vacancy_name=None):
@@ -450,7 +451,7 @@ def get_leads(client_id=None, status_filter=None, search=None, days=7, vacancy_n
         query += " AND l.status = %s"
         params.append(status_filter)
     if vacancy_name:
-        query += " AND l.vacancy_name = %s"
+        query += " AND f.form_name = %s"
         params.append(vacancy_name)
     if search:
         query += " AND (l.full_name ILIKE %s OR l.email ILIKE %s OR l.phone ILIKE %s)"
@@ -466,13 +467,15 @@ def get_leads_today_count(client_id=None, vacancy_name=None):
     vandaag op te halen en in Python te tellen)."""
     from datetime import datetime, timezone
     cutoff = datetime.now(timezone.utc).date().isoformat()
-    query = "SELECT COUNT(*) AS n FROM leads WHERE created_time >= %s"
+    query = """SELECT COUNT(*) AS n FROM leads l
+               LEFT JOIN forms f ON l.form_id = f.form_id
+               WHERE l.created_time >= %s"""
     params = [cutoff]
     if client_id:
-        query += " AND client_id = %s"
+        query += " AND l.client_id = %s"
         params.append(client_id)
     if vacancy_name:
-        query += " AND vacancy_name = %s"
+        query += " AND f.form_name = %s"
         params.append(vacancy_name)
     with _conn() as con:
         row = con.execute(query, params).fetchone()
