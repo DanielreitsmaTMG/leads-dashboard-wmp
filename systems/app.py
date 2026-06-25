@@ -210,6 +210,15 @@ st.set_page_config(
 # ── Apple-achtige styling: rustige fonts, ronde hoeken, subtiele schaduwen ───
 st.markdown("""
 <style>
+/* Verberg Streamlit-chrome (toolbar, footer, sidebar-toggle) */
+#MainMenu, header[data-testid="stHeader"], footer,
+button[data-testid="collapsedControl"],
+[data-testid="stToolbar"], [data-testid="stDecoration"],
+[data-testid="stStatusWidget"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+
 /* Algemeen lettertype */
 html, body, [class*="css"] {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
@@ -508,7 +517,11 @@ def _check_login():
             st.session_state.role = role
             return
 
-    st.markdown(f"<h2 style='text-align:center; margin-top:4rem;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
+    clean_title = " ".join(w for w in (APP_TITLE or "Dashboard").split() if w.isascii() or len(w) > 2).strip() or APP_TITLE
+    st.markdown(
+        f"<h2 style='text-align:center; margin-top:6rem; font-weight:600; letter-spacing:-0.02em;'>{clean_title}</h2>",
+        unsafe_allow_html=True,
+    )
     _, col, _ = st.columns([1, 1.2, 1])
     with col:
         with st.form("login_form"):
