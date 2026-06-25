@@ -200,7 +200,12 @@ def is_new(value):
 APP_TITLE = st.secrets.get("APP_TITLE", "⚡ Leads Dashboard")
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-st.set_page_config(page_title=APP_TITLE, page_icon="⚡", layout="wide")
+st.set_page_config(
+    page_title=APP_TITLE,
+    page_icon="⚡",
+    layout="wide",
+    menu_items={"Get help": None, "Report a bug": None, "About": None},
+)
 
 # ── Apple-achtige styling: rustige fonts, ronde hoeken, subtiele schaduwen ───
 st.markdown("""
