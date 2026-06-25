@@ -669,7 +669,7 @@ if st.session_state.page == "settings":
             import requests
             pages = []
             try:
-                # Stap 1: directe pagina's via gebruiker
+                # Stap 1: directe pagina's (werkt voor zowel gebruikers- als systeemgebruiker-tokens)
                 r = requests.get(
                     "https://graph.facebook.com/v21.0/me/accounts",
                     params={"access_token": token, "limit": 100},
@@ -678,42 +678,35 @@ if st.session_state.page == "settings":
                 r.raise_for_status()
                 pages += r.json().get("data", [])
 
-                # Stap 2: pagina's via Business Manager
-                biz_r = requests.get(
-                    "https://graph.facebook.com/v21.0/me/businesses",
-                    params={"access_token": token, "limit": 100},
-                    timeout=15,
-                )
-                biz_r.raise_for_status()
-                businesses = biz_r.json().get("data", [])
-
-                seen_ids = {p["id"] for p in pages}
-                for biz in businesses:
-                    for endpoint in ["owned_pages", "client_pages"]:
-                        pr = requests.get(
-                            f"https://graph.facebook.com/v21.0/{biz['id']}/{endpoint}",
-                            params={"access_token": token, "fields": "id,name", "limit": 100},
-                            timeout=15,
-                        )
-                        if pr.ok:
-                            for page in pr.json().get("data", []):
-                                if page["id"] not in seen_ids:
-                                    pages.append(page)
-                                    seen_ids.add(page["id"])
+                # Stap 2: pagina's via Business Manager (alleen voor gebruikerstokens, niet voor
+                # systeemgebruiker-tokens — fouten hier worden genegeerd)
+                try:
+                    biz_r = requests.get(
+                        "https://graph.facebook.com/v21.0/me/businesses",
+                        params={"access_token": token, "limit": 100},
+                        timeout=15,
+                    )
+                    if biz_r.ok:
+                        seen_ids = {p["id"] for p in pages}
+                        for biz in biz_r.json().get("data", []):
+                            for endpoint in ["owned_pages", "client_pages"]:
+                                pr = requests.get(
+                                    f"https://graph.facebook.com/v21.0/{biz['id']}/{endpoint}",
+                                    params={"access_token": token, "fields": "id,name", "limit": 100},
+                                    timeout=15,
+                                )
+                                if pr.ok:
+                                    for page in pr.json().get("data", []):
+                                        if page["id"] not in seen_ids:
+                                            pages.append(page)
+                                            seen_ids.add(page["id"])
+                except Exception:
+                    pass
 
                 st.session_state["discovered_pages"] = pages
-                # Debug output
-                st.session_state["debug_me"] = r.json()
-                st.session_state["debug_biz"] = biz_r.json()
             except Exception as e:
                 st.error(f"Fout bij ophalen pagina's: {e}")
 
-        if "debug_me" in st.session_state:
-            with st.expander("🔧 Debug: /me/accounts"):
-                st.json(st.session_state["debug_me"])
-        if "debug_biz" in st.session_state:
-            with st.expander("🔧 Debug: /me/businesses"):
-                st.json(st.session_state["debug_biz"])
 
         if "discovered_pages" in st.session_state:
             pages = st.session_state["discovered_pages"]
