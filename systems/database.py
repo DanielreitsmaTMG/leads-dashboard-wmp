@@ -502,8 +502,10 @@ def get_status_counts(client_id=None):
 def get_lead(lead_id):
     with _conn() as con:
         lead = con.execute(
-            """SELECT l.*, c.name AS client_name
-               FROM leads l LEFT JOIN clients c ON l.client_id = c.id
+            """SELECT l.*, c.name AS client_name, f.form_name
+               FROM leads l
+               LEFT JOIN clients c ON l.client_id = c.id
+               LEFT JOIN forms f ON l.form_id = f.form_id
                WHERE l.id = %s""",
             (lead_id,),
         ).fetchone()
