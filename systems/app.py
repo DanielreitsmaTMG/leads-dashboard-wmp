@@ -96,7 +96,7 @@ except Exception as e:
 def _scheduled_sync():
     fetch_all_clients()
     from fetch_leads import backfill_summaries
-    backfill_summaries(limit=5)
+    backfill_summaries(limit=100)
 
 
 if "scheduler_started" not in st.session_state:
@@ -636,7 +636,7 @@ with st.sidebar:
         with st.spinner("Leads ophalen..."):
             n, log = fetch_all_clients()
             from fetch_leads import backfill_summaries
-            backfill_summaries(limit=5)
+            backfill_summaries(limit=100)
             clear_cache()
             st.session_state.sync_log = log
             st.rerun()
