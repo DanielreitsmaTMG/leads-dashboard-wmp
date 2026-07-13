@@ -298,8 +298,13 @@ def upsert_lead(data):
         ).fetchone()
         if existing:
             updates, params = [], []
-            # Naam/email/telefoon: alleen invullen als nog leeg (gebruiker kan dit zelf aanvullen).
-            for field in ("full_name", "email", "phone"):
+            # full_name: altijd bijwerken zodat foute waarden (bv. bedrijfsnaam ipv persoonsnaam)
+            # na een fix automatisch gecorrigeerd worden bij de volgende sync.
+            if data.get("full_name") and data["full_name"] != existing.get("full_name"):
+                updates.append("full_name = %s")
+                params.append(data["full_name"])
+            # Email/telefoon: alleen invullen als nog leeg.
+            for field in ("email", "phone"):
                 if not existing.get(field) and data.get(field):
                     updates.append(f"{field} = %s")
                     params.append(data[field])
