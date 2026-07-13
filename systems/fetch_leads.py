@@ -168,7 +168,7 @@ def _process(raw, client_id, client_name, form_id, form_name=None):
         if not val:
             continue
 
-        if _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key:
+        if _matches(key, NAME_KEYWORDS) and "first" not in key and "last" not in key and "company" not in key:
             full = val
         elif _matches(key, FIRST_KEYWORDS):
             first.append(val)
